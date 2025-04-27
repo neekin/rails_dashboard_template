@@ -1,0 +1,71 @@
+module Api
+  class SessionsController < ApiController
+    before_action :authorize_refresh_by_access_request!, only: [ :refresh ]
+
+    def login
+      user = User.find_by(username: params[:username])
+
+      if user&.authenticate(params[:password])
+        tokens = generate_tokens(user)
+        set_auth_headers(tokens)
+        render json: { user: user_info(user) }, status: :ok
+      else
+        render json: { error: "用户名或密码错误" }, status: :unauthorized
+      end
+    end
+
+    def refresh
+      user = current_user_from_refresh_token
+      if user
+        tokens = generate_tokens(user)
+        set_auth_headers(tokens)
+        render json: { user: user_info(user) }, status: :ok
+      else
+        render json: { error: "无效的刷新请求" }, status: :unauthorized
+      end
+    end
+
+    def logout
+      head :ok
+    end
+
+    private
+
+    def generate_tokens(user)
+      access_token = JsonWebToken.encode({ user_id: user.id }, 15.minutes.from_now)
+      refresh_token = JsonWebToken.encode({ user_id: user.id, refresh: true }, 7.days.from_now)
+
+      {
+        "access-token" => access_token,
+        "client" => refresh_token,
+        "uid" => user.id.to_s
+      }
+    end
+
+    def user_info(user)
+      {
+        id: user.id,
+        username: user.username,
+        email: user.email
+      }
+    end
+
+    def current_user_from_refresh_token
+      token = request.headers["client"]
+      payload = JsonWebToken.decode(token)
+      return unless payload && payload[:refresh]
+
+      User.find_by(id: payload[:user_id])
+    end
+
+    def authorize_refresh_by_access_request!
+      head :unauthorized unless current_user_from_refresh_token
+    end
+
+    def set_auth_headers(tokens)
+      tokens.each do |key, value|
+        response.headers[key] = value
+      end
+    end
+  end
+end

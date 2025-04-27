@@ -1,24 +1,19 @@
 # README
 
-This README would normally document whatever steps are necessary to get the
-application up and running.
 
-Things you may want to cover:
 
-* Ruby version
+# dokku 部署
 
-* System dependencies
+# kamal 部署
 
-* Configuration
 
-* Database creation
+### 一些命令
+rails createsuperuser #创建超级用户
+rails create_user     #创建普通用户
+rails reset_password  #重置密码
+rails delete_user     #删除用户
 
-* Database initialization
+RAILS_ENV=production EDITOR="code --wait" rails credentials:edit
 
-* How to run the test suite
-
-* Services (job queues, cache servers, search engines, etc.)
-
-* Deployment instructions
-
-* ...
+#### 如果想在容器里使用命令
+docker exec -it <container_id> bin/rails create_user

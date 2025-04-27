@@ -1,4 +1,10 @@
 Rails.application.routes.draw do
+  namespace :api do
+    post "/login", to: "sessions#login"
+    post "/refresh", to: "sessions#refresh"
+    delete "/logout", to: "sessions#logout"
+    get "/profile", to: "profiles#show"
+  end
   root "pages#home"
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 
@@ -12,4 +18,6 @@ Rails.application.routes.draw do
 
   # Defines the root path route ("/")
   # root "posts#index"
+  # 兜底，给前端React
+  get "*path", to: "pages#home", constraints: ->(req) { !req.xhr? && req.format.html? }
 end

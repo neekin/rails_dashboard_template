@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import RubyPlugin from 'vite-plugin-ruby'
 import react from '@vitejs/plugin-react'
-
+import path from 'path' // 导入 path 模块
 export default defineConfig({
   plugins: [
     react({
@@ -11,8 +11,15 @@ export default defineConfig({
     }),
     RubyPlugin(),
   ],
+  server: {
+    host: "0.0.0.0",
+    port: 3036,
+  },
   resolve: {
     extensions: ['.js', '.jsx', '.ts', '.tsx'],
+    alias: {
+     "@": path.resolve(__dirname, 'app/frontend'),
+    },
   },
   // 明确告诉 esbuild 如何处理 .js 文件
   esbuild: {
