@@ -1,24 +1,52 @@
-import {createBrowserRouter} from "react-router";
-import ProtectedRoute from './ProtectedRoute'; 
+import { createBrowserRouter } from "react-router";
+import ProtectedRoute from "./ProtectedRoute";
 import HomePage from "@/pages/HomePage";
 import LoginPage from "@/pages/LoginPage";
 import Page404 from "@/pages/Page404";
+// import AdminLayout from "@/components/AdminLayout";
+import AdminLayout from "@/components/pro/AdminLayout";
+import DynamicTablePage from "@/pages/DynamicTablePage";
+import DynamicFieldPage from "@/pages/DynamicFieldPage";
+import DynamicDataPage from "@/pages/DynamicDataPage";
 const router = createBrowserRouter([
   {
-    path: "/",
+    path: "/admin",
     element: <ProtectedRoute />, // 受保护的路由
     children: [
-      { path: "/", element: <HomePage /> }, // 子路由
+      {
+        path: "",
+        element: <AdminLayout />,
+        children: [
+          { path: "", element: <HomePage /> },
+          {
+            path: "dynamic_tables",
+            element: <DynamicTablePage />,
+          },
+          {
+            path: "dynamic_fields/:tableId",
+            element: <DynamicFieldPage />,
+          },
+          {
+            path: "dynamic_records/:tableId",
+            element: <DynamicDataPage />,
+          },
+        ],
+      },
     ],
   },
-    {
-      path: "/login",
-      element: <LoginPage />,
-    },
-    {
-      path: "*", // 捕获所有未匹配的路由
-      element: <Page404 />, // 显示 404 页面
-    },
-  ]);
+  {
+    path: "/login",
+    element: <LoginPage />,
+  },
 
-  export default router;
+  {
+    path: "/login1",
+    element: <LoginPage />,
+  },
+  {
+    path: "*", // 捕获所有未匹配的路由
+    element: <Page404 />, // 显示 404 页面
+  },
+]);
+
+export default router;

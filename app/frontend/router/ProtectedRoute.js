@@ -20,7 +20,7 @@ function ProtectedRoute() {
     }
     return <Navigate to="/login" />;
   }
-  return <Outlet />; // 渲染子路由
+  return <Outlet  context={{ user }} />; // 渲染子路由
 }
 
 export default ProtectedRoute;

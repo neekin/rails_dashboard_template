@@ -1,4 +1,4 @@
-class JsonWebToken
+module JsonWebToken
   SECRET_KEY = "neekin_haha"
 
   def self.encode(payload, exp = 15.minutes.from_now)

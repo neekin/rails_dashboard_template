@@ -1,6 +1,6 @@
 # app/controllers/api/profiles_controller.rb
 module Api
-  class ProfilesController < ActionController::API
+  class ProfilesController < ApiController
     before_action :authorize_access_request!
 
     def show

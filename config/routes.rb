@@ -4,6 +4,10 @@ Rails.application.routes.draw do
     post "/refresh", to: "sessions#refresh"
     delete "/logout", to: "sessions#logout"
     get "/profile", to: "profiles#show"
+    resources :dynamic_tables do
+      resources :dynamic_fields, only: [ :index, :create ]
+      resources :dynamic_records, only: [ :index, :create, :update, :destroy ]
+    end
   end
   root "pages#home"
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
