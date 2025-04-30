@@ -8,6 +8,15 @@ Rails.application.routes.draw do
       resources :dynamic_fields, only: [ :index, :create ]
       resources :dynamic_records, only: [ :index, :create, :update, :destroy ]
     end
+    namespace :v1 do
+      # 记录CRUD路由
+      get "/:identifier", to: "dynamic_api#index"
+      post "/:identifier", to: "dynamic_api#create"
+      get "/:identifier/:id", to: "dynamic_api#show"
+      put "/:identifier/:id", to: "dynamic_api#update"
+      patch "/:identifier/:id", to: "dynamic_api#update"
+      delete "/:identifier/:id", to: "dynamic_api#destroy"
+    end
   end
   root "pages#home"
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html

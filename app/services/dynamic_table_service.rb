@@ -82,18 +82,26 @@ class DynamicTableService
 
     # 重命名物理表中的字段
     def rename_field_in_physical_table(table, old_name, new_name)
-      table_name = physical_table_name(table)
-      safe_old_name = sanitize_column_name(old_name)
-      safe_new_name = sanitize_column_name(new_name)
+      table_name = "dyn_#{table.id}"
 
-      begin
-        Rails.logger.info "重命名字段: #{safe_old_name} 为 #{safe_new_name} 在表 #{table_name}"
-        ActiveRecord::Base.connection.execute("ALTER TABLE #{table_name} RENAME COLUMN #{safe_old_name} TO #{safe_new_name}")
-        true
-      rescue => e
-        Rails.logger.error "重命名字段失败: #{e.message}\n#{e.backtrace.join("\n")}"
-        raise e
+      # 检查表是否存在
+      unless ActiveRecord::Base.connection.table_exists?(table_name)
+        raise "物理表 #{table_name} 不存在"
       end
+
+      # 检查字段是否存在
+      unless ActiveRecord::Base.connection.column_exists?(table_name, old_name)
+        raise "字段 #{old_name} 在表 #{table_name} 中不存在"
+      end
+
+      # 检查新名称是否已存在
+      if ActiveRecord::Base.connection.column_exists?(table_name, new_name)
+        raise "字段 #{new_name} 在表 #{table_name} 中已存在"
+      end
+
+      # 执行重命名操作
+      ActiveRecord::Base.connection.rename_column(table_name, old_name, new_name)
+      Rails.logger.info "成功将表 #{table_name} 中的字段 #{old_name} 重命名为 #{new_name}"
     end
 
     # 更改字段类型
@@ -198,6 +206,22 @@ class DynamicTableService
         0.0
       else
         nil
+      end
+    end
+
+    def get_dynamic_model(table)
+      table_name = physical_table_name(table)
+
+      # 检查表是否存在
+      unless ActiveRecord::Base.connection.table_exists?(table_name)
+        raise "物理表 #{table_name} 不存在"
+      end
+
+      # 创建动态模型类
+      Class.new(ActiveRecord::Base) do
+        self.table_name = table_name
+        # 禁用STI
+        self.inheritance_column = :_type_disabled
       end
     end
 

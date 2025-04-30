@@ -171,13 +171,18 @@ RSpec.describe Api::DynamicTablesController, type: :controller do
     table = DynamicTable.create!(table_name: "test_table")
     field = table.dynamic_fields.create!(name: "name", field_type: "string", required: true)
 
-    # 确保物理表存在
+    # 确保物理表存在并正确设置
     table_name = "dyn_#{table.id}"
-    unless ActiveRecord::Base.connection.table_exists?(table_name)
-      ActiveRecord::Base.connection.create_table(table_name) do |t|
-        t.string :name, null: false
-        t.timestamps
-      end
+
+    # 先删除表如果存在，避免冲突
+    if ActiveRecord::Base.connection.table_exists?(table_name)
+      ActiveRecord::Base.connection.drop_table(table_name)
+    end
+
+    # 重新创建表
+    ActiveRecord::Base.connection.create_table(table_name) do |t|
+      t.string :name, null: false
+      t.timestamps
     end
 
     # 更新字段
@@ -186,7 +191,15 @@ RSpec.describe Api::DynamicTablesController, type: :controller do
       { name: "age", field_type: "integer", required: false }
     ]
 
+    # 使用 puts 打印更多调试信息
+    puts "原始字段名: name, 新字段名: full_name"
+
     put :update, params: { id: table.id, fields: updated_fields }
+
+    # 如果有错误，打印出来以便调试
+    if response.status != 200
+      puts "更新失败，错误信息: #{response.body}"
+    end
 
     expect(response).to have_http_status(:ok)
     json_response = JSON.parse(response.body)
@@ -197,6 +210,10 @@ RSpec.describe Api::DynamicTablesController, type: :controller do
     expect(table.dynamic_fields.count).to eq(2)
     expect(table.dynamic_fields.pluck(:name)).to include("full_name", "age")
 
+    # 打印列名以便调试
+    columns = ActiveRecord::Base.connection.columns(table_name).map(&:name)
+    puts "物理表中的列: #{columns.join(', ')}"
+
     # 验证物理表是否更新
     expect(ActiveRecord::Base.connection.column_exists?(table_name, "full_name")).to be true
     expect(ActiveRecord::Base.connection.column_exists?(table_name, "age")).to be true
@@ -204,35 +221,40 @@ RSpec.describe Api::DynamicTablesController, type: :controller do
   end
 
   describe "DELETE #destroy" do
-    it "成功删除动态表" do
-      # 创建测试表格
-      table = DynamicTable.create!(table_name: "待删除表格")
-      field = table.dynamic_fields.create!(name: "test_field", field_type: "string", required: true)
+  it "成功删除动态表" do
+    # 创建测试表格
+    table = DynamicTable.create!(table_name: "待删除表格")
+    field = table.dynamic_fields.create!(name: "test_field", field_type: "string", required: true)
 
-      # 创建物理表
-      table_name = "dyn_#{table.id}"
-      ActiveRecord::Base.connection.create_table(table_name) do |t|
-        t.string :test_field
-        t.timestamps
-      end
-
-      # 确认物理表存在
-      expect(ActiveRecord::Base.connection.table_exists?(table_name)).to be true
-
-      # 执行删除
-      delete :destroy, params: { id: table.id }
-
-      # 验证响应
-      expect(response).to have_http_status(:ok)
-      json_response = JSON.parse(response.body)
-      expect(json_response["status"]).to eq("success")
-
-      # 验证表记录已删除
-      expect(DynamicTable.exists?(table.id)).to be false
-
-      # 验证物理表已删除
-      expect(ActiveRecord::Base.connection.table_exists?(table_name)).to be false
+    # 先检查并删除已存在的物理表
+    table_name = "dyn_#{table.id}"
+    if ActiveRecord::Base.connection.table_exists?(table_name)
+      ActiveRecord::Base.connection.drop_table(table_name, force: :cascade)
     end
+
+    # 创建物理表
+    ActiveRecord::Base.connection.create_table(table_name) do |t|
+      t.string :test_field
+      t.timestamps
+    end
+
+    # 确认物理表存在
+    expect(ActiveRecord::Base.connection.table_exists?(table_name)).to be true
+
+    # 执行删除
+    delete :destroy, params: { id: table.id }
+
+    # 验证响应
+    expect(response).to have_http_status(:ok)
+    json_response = JSON.parse(response.body)
+    expect(json_response["status"]).to eq("success")
+
+    # 验证表记录已删除
+    expect(DynamicTable.exists?(table.id)).to be false
+
+    # 验证物理表已删除
+    expect(ActiveRecord::Base.connection.table_exists?(table_name)).to be false
+  end
 
     it "表不存在时返回404" do
       delete :destroy, params: { id: 9999 }

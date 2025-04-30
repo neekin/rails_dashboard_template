@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { Button, Input, Modal, message ,Popconfirm} from "antd";
+import { Button, Input, Modal, message, Popconfirm, Form, Tooltip } from "antd";
+import { InfoCircleOutlined } from '@ant-design/icons';
 import {
   EditableProTable,
   ProCard,
@@ -11,8 +12,8 @@ import FieldEditor from "@/components/FieldEditor";
 import { apiFetch } from "@/lib/api/fetch";
 
 const DynamicTablePage = () => {
+  const [form] = Form.useForm();
   const [fields, setFields] = useState([]); // 字段数据
-  const [tableName, setTableName] = useState(""); // 表格名称
   const [modalVisible, setModalVisible] = useState(false);
   const [editableKeys, setEditableRowKeys] = useState([]); // 可编辑行的 key
   const [tableData, setTableData] = useState([]); // 表格列表数据
@@ -22,15 +23,13 @@ const DynamicTablePage = () => {
     total: 0,
   });
   const [loading, setLoading] = useState(false);
-
-
+  const [editingTable, setEditingTable] = useState(null); // 当前编辑的表格ID
+  const [fetchingFields, setFetchingFields] = useState(false); // 加载字段状态
 
   // 获取表格列表
   const fetchTables = async (params = {}) => {
-    console.log(params)
     setLoading(true);
     try {
-
       const response = await apiFetch(`/api/dynamic_tables?query=${JSON.stringify(params)}`);
 
       // 更新状态
@@ -48,27 +47,103 @@ const DynamicTablePage = () => {
     }
   };
 
+  // 获取表格详情（包括字段）
+  const fetchTableDetail = async (tableId) => {
+    setFetchingFields(true);
+    try {
+      const response = await apiFetch(`/api/dynamic_tables/${tableId}`);
+      return response || { dynamic_fields: [] }; // 确保返回有效对象
+    } catch (err) {
+      message.error("获取表格详情失败");
+      console.error(err);
+      return { dynamic_fields: [] }; // 错误时返回空字段数组
+    } finally {
+      setFetchingFields(false);
+    }
+  };
+
   const handleCreateTable = async () => {
     try {
+      // 使用Form进行验证
+      await form.validateFields();
+      const values = form.getFieldsValue();
+      
+      // 处理字段数据，确保每个字段的格式正确
       const processedFields = fields.map((field) => ({
         ...field,
-        id: null, // 确保新字段的 ID 为 null
+        id: null, // 确保新字段的ID为null
+        name: field.name,
+        field_type: field.field_type,
+        required: !!field.required, // 确保布尔值
       }));
 
-      const response = await apiFetch("/api/dynamic_tables", {
+      await apiFetch("/api/dynamic_tables", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          table_name: tableName,
-          fields: processedFields, // 将字段数据一起提交
+          table_name: values.table_name,
+          api_identifier: values.api_identifier,
+          fields: processedFields,
         }),
       });
+      
       message.success("表格创建成功");
       setModalVisible(false);
       setFields([]); // 清空字段数据
-      setTableName(""); // 清空表格名称
+      form.resetFields(); // 重置表单
       fetchTables(); // 刷新表格列表
     } catch (err) {
-      message.error("创建失败");
+      if (err.errorFields) {
+        // 表单验证错误
+        return;
+      }
+      message.error("创建失败: " + (err.message || "未知错误"));
+      console.error("创建表格失败:", err);
+    }
+  };
+
+  // 处理更新表格
+  const handleUpdateTable = async () => {
+    if (!editingTable) return;
+    
+    try {
+      // 使用Form进行验证
+      await form.validateFields();
+      const values = form.getFieldsValue();
+      
+      // 处理字段数据，确保每个字段的格式正确
+      const processedFields = fields.map((field) => ({
+        ...field,
+        // 已有字段保留ID，新字段ID为null
+        id: field.isNew ? null : field.id,
+        name: field.name,
+        field_type: field.field_type,
+        required: !!field.required, // 确保布尔值
+      }));
+
+      await apiFetch(`/api/dynamic_tables/${editingTable}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          table_name: values.table_name,
+          api_identifier: values.api_identifier,
+          fields: processedFields,
+        }),
+      });
+      
+      message.success("表格更新成功");
+      setModalVisible(false);
+      setFields([]); // 清空字段数据
+      form.resetFields(); // 重置表单
+      setEditingTable(null); // 清除编辑状态
+      fetchTables(); // 刷新表格列表
+    } catch (err) {
+      if (err.errorFields) {
+        // 表单验证错误
+        return;
+      }
+      message.error("更新失败: " + (err.message || "未知错误"));
+      console.error("更新表格失败:", err);
     }
   };
 
@@ -78,20 +153,73 @@ const DynamicTablePage = () => {
         method: "DELETE",
       });
       
-      if (response.status) {
-        message.success("表格删除成功");
-        // 重新加载表格数据
-        fetchTables({
-          current: pagination.current,
-          pageSize: pagination.pageSize,
-        });
-      } else {
-        message.error("删除失败");
-      }
+      message.success("表格删除成功");
+      // 重新加载表格数据
+      fetchTables({
+        current: pagination.current,
+        pageSize: pagination.pageSize,
+      });
     } catch (err) {
       message.error("删除失败: " + (err.message || "未知错误"));
-      console.error(err);
+      console.error("删除表格失败:", err);
     }
+  };
+
+  // 处理编辑按钮点击
+  const handleEdit = async (record) => {
+    // 设置编辑状态
+    setEditingTable(record.id);
+    
+    // 先填充基本数据
+    form.setFieldsValue({
+      table_name: record.table_name,
+      api_identifier: record.api_identifier,
+    });
+    
+    // 不论record中是否有字段数据，都从服务器获取最新数据
+    // 这确保我们总是使用最新的字段定义
+    setFetchingFields(true);
+    try {
+      const detailData = await fetchTableDetail(record.id);
+      if (detailData && detailData.dynamic_fields && detailData.dynamic_fields.length > 0) {
+        // 为每个字段添加key属性（用于EditableProTable）
+        setFields(detailData.dynamic_fields.map(f => ({ 
+          ...f, 
+          key: f.id
+        })));
+      } else {
+        setFields([]);
+        console.log("该表格没有字段或字段加载失败");
+      }
+    } catch (err) {
+      console.error("加载字段数据失败:", err);
+      setFields([]);
+    } finally {
+      setFetchingFields(false);
+      setModalVisible(true); // 无论结果如何都显示模态框
+    }
+  };
+
+  // 渲染API地址带复制功能
+  const renderApiUrl = (text, record) => {
+    const apiUrl = record.api_url || `/api/v1/${record.table_name.toLowerCase()}`;
+    const baseUrl = window.location.origin;
+    const fullUrl = `${baseUrl}${apiUrl}`;
+    
+    return (
+      <Tooltip title="点击复制API地址">
+        <span 
+          style={{ cursor: 'pointer', color: '#1890ff' }}
+          onClick={() => {
+            navigator.clipboard.writeText(fullUrl)
+              .then(() => message.success('API地址已复制'))
+              .catch(err => message.error('复制失败'));
+          }}
+        >
+          {apiUrl}
+        </span>
+      </Tooltip>
+    );
   };
 
   const tableColumns = [
@@ -100,6 +228,12 @@ const DynamicTablePage = () => {
       dataIndex: "table_name",
       key: "table_name",
       sorter: true,
+    },
+    {
+      title: "API地址",
+      dataIndex: "api_url",
+      key: "api_url",
+      render: renderApiUrl,
     },
     {
       title: "创建时间",
@@ -117,6 +251,9 @@ const DynamicTablePage = () => {
         <a key="data" href={`/admin/dynamic_records/${record.id}`}>
           数据管理
         </a>,
+        <a key="edit" onClick={() => handleEdit(record)}>
+          编辑
+        </a>,
         <Popconfirm
           key="delete"
           title="确定要删除此表格吗?"
@@ -131,6 +268,16 @@ const DynamicTablePage = () => {
     },
   ];
 
+  // 初始加载
+  useEffect(() => {
+    fetchTables();
+  }, []);
+
+  // 模态框标题和提交按钮根据当前模式确定
+  const modalTitle = editingTable ? "编辑表格" : "创建新表格";
+  const modalSubmitText = editingTable ? "更新" : "创建";
+  const handleSubmit = editingTable ? handleUpdateTable : handleCreateTable;
+
   return (
     <div>
       <ProTable
@@ -141,20 +288,10 @@ const DynamicTablePage = () => {
         loading={loading}
         pagination={pagination}
         search={true}
-        // options={{
-        //   density: true,
-        //   fullScreen: true,
-        //   reload: () =>
-        //     fetchTables({
-        //       current: pagination.current,
-        //       pageSize: pagination.pageSize,
-        //     }),
-        // }}
-        // onChange={handleTableChange}
         request={async (params = {}) => {
           await fetchTables(params);
           return {
-            data:tableData,
+            data: tableData,
             success: true,
           };
         }}
@@ -162,43 +299,85 @@ const DynamicTablePage = () => {
           <Button
             key="add"
             type="primary"
-            onClick={() => setModalVisible(true)}
+            onClick={() => {
+              form.resetFields();
+              setFields([]);
+              setEditingTable(null); // 确保是创建模式
+              setModalVisible(true);
+            }}
           >
             创建新表格
           </Button>,
         ]}
       />
-      {/* <Button type="primary" onClick={() => setModalVisible(true)} style={{ marginTop: 16 }}>
-        
-      </Button> */}
       <Modal
         width={600}
-        title="创建新表格"
+        title={modalTitle}
         open={modalVisible}
-        onCancel={() => setModalVisible(false)}
+        onCancel={() => {
+          setModalVisible(false);
+          setEditingTable(null);
+          setFields([]);
+          form.resetFields();
+        }}
         footer={[
-          <Button key="cancel" onClick={() => setModalVisible(false)}>
+          <Button key="cancel" onClick={() => {
+            setModalVisible(false);
+            setEditingTable(null);
+            setFields([]);
+            form.resetFields();
+          }}>
             取消
           </Button>,
-          <Button key="submit" type="primary" onClick={handleCreateTable}>
-            创建
+          <Button key="submit" type="primary" onClick={handleSubmit} loading={fetchingFields}>
+            {modalSubmitText}
           </Button>,
         ]}
       >
-        <div style={{ marginBottom: 16 }}>
-          <label>表格名称：</label>
-          <Input
-            value={tableName}
-            onChange={(e) => setTableName(e.target.value)}
-            placeholder="请输入表格名称"
+        <Form
+          form={form}
+          layout="vertical"
+        >
+          <Form.Item
+            name="table_name"
+            label="表格名称"
+            rules={[
+              { required: true, message: '请输入表格名称' },
+              { pattern: /^[a-zA-Z_][a-zA-Z0-9_]*$/, message: '只能包含字母、数字、下划线，且不能以数字开头' }
+            ]}
+          >
+            <Input placeholder="例如: products, user_profiles" />
+          </Form.Item>
+          
+          <Form.Item
+            name="api_identifier"
+            label={
+              <span>
+                API标识符 <Tooltip title="用于API访问路径，例如: /api/v1/products。可选，留空则使用表名。">
+                  <InfoCircleOutlined style={{ marginLeft: 5 }} />
+                </Tooltip>
+              </span>
+            }
+            rules={[
+              { pattern: /^[a-z][a-z0-9_]*$/, message: '只能包含小写字母、数字和下划线，且必须以字母开头' }
+            ]}
+          >
+            <Input placeholder="例如: products, user_profiles" />
+          </Form.Item>
+        </Form>
+        
+        <div style={{ marginTop: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <label>字段定义：</label>
+            {fetchingFields && <span style={{ color: '#1890ff' }}>加载字段中...</span>}
+          </div>
+          <FieldEditor
+            fields={fields}
+            setFields={setFields}
+            editableKeys={editableKeys}
+            setEditableRowKeys={setEditableRowKeys}
           />
         </div>
-        <FieldEditor
-          fields={fields}
-          setFields={setFields}
-          editableKeys={editableKeys}
-          setEditableRowKeys={setEditableRowKeys}
-        />
       </Modal>
     </div>
   );

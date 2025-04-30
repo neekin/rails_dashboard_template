@@ -10,7 +10,19 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_04_29_191058) do
+ActiveRecord::Schema[8.0].define(version: 2025_04_30_220807) do
+  create_table "dyn_1", force: :cascade do |t|
+    t.string "name"
+    t.integer "age"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+
+  create_table "dyn_2", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+  end
+
   create_table "dynamic_fields", force: :cascade do |t|
     t.integer "dynamic_table_id", null: false
     t.string "name"
@@ -25,6 +37,8 @@ ActiveRecord::Schema[8.0].define(version: 2025_04_29_191058) do
     t.string "table_name"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "api_identifier"
+    t.index ["api_identifier"], name: "index_dynamic_tables_on_api_identifier", unique: true
   end
 
   create_table "users", force: :cascade do |t|
