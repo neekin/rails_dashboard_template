@@ -11,6 +11,7 @@ const FieldEditor = ({ fields, setFields, editableKeys, setEditableRowKeys }) =>
     datetime: { text: "日期时间" },
     decimal: { text: "小数" },
     float: { text: "浮点数" },
+    file: { text: "文件" },
   };
   const columns = [
     {

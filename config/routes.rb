@@ -1,14 +1,15 @@
 Rails.application.routes.draw do
   namespace :api do
-    post "/login", to: "sessions#login"
-    post "/refresh", to: "sessions#refresh"
-    delete "/logout", to: "sessions#logout"
-    get "/profile", to: "profiles#show"
+    post "login", to: "sessions#login"
+    post "refresh", to: "sessions#refresh"
+    delete "logout", to: "sessions#logout"
+    get "profile", to: "profiles#show"
     resources :dynamic_tables do
       resources :dynamic_fields, only: [ :index, :create ]
       resources :dynamic_records, only: [ :index, :create, :update, :destroy ]
     end
     namespace :v1 do
+      get "blobs/:signed_id", to: "blobs#show", as: :blob
       # 记录CRUD路由
       get "/:identifier", to: "dynamic_api#index"
       post "/:identifier", to: "dynamic_api#create"

@@ -1,5 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { Button, Form, Input, Modal, message, Popconfirm } from "antd";
+import { Button, Form, Input, Modal, message, Popconfirm ,Upload,Image} from "antd";
+import { 
+  UploadOutlined, 
+  FileOutlined, 
+  FilePdfOutlined, 
+  FileWordOutlined, 
+  FileExcelOutlined 
+} from "@ant-design/icons";
 import { useParams ,useNavigate} from "react-router";
 import { ProTable } from "@ant-design/pro-components";
 import { apiFetch } from "@/lib/api/fetch";
@@ -15,6 +22,33 @@ const DynamicDataPage = () => {
 
   const fetchTableData = async (params = {}) => {
     try {
+      const getFileIcon = (contentType) => {
+        if (!contentType) return <FileOutlined style={{ fontSize: '24px' }} />;
+        
+        // 根据MIME类型返回对应图标
+        if (contentType.startsWith('application/pdf')) {
+          return <FilePdfOutlined style={{ fontSize: '24px', color: '#ff4d4f' }} />;
+        } else if (
+          contentType.includes('word') || 
+          contentType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+          contentType === 'application/msword'
+        ) {
+          return <FileWordOutlined style={{ fontSize: '24px', color: '#1890ff' }} />;
+        } else if (
+          contentType.includes('excel') || 
+          contentType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+          contentType === 'application/vnd.ms-excel'
+        ) {
+          return <FileExcelOutlined style={{ fontSize: '24px', color: '#52c41a' }} />;
+        } else if (contentType.startsWith('image/')) {
+          // 这里不应该匹配到，因为图片会单独处理
+          return <FileOutlined style={{ fontSize: '24px', color: '#722ed1' }} />;
+        } else {
+          // 默认文件图标
+          return <FileOutlined style={{ fontSize: '24px' }} />;
+        }
+      };
+
       const response = await apiFetch(
        `/api/dynamic_tables/${tableId}/dynamic_records?query=${JSON.stringify(params)}`
       );
@@ -25,6 +59,40 @@ const DynamicDataPage = () => {
           title: field.name,
           dataIndex: field.name,
           key: field.name,
+          render: (text, record) => {
+            // 如果是文件类型，显示预览或下载链接
+            if (field.field_type === 'file' && text) {
+              console.log("text",text)
+              const isImage = text.content_type?.startsWith('image/');
+              
+              if (isImage) {
+                return (
+                  <Image 
+                    src={`/api/v1/blobs/${text}`} 
+                    alt={field.name}
+                    width={50}
+                    height={50}
+                    style={{ objectFit: 'cover' }}
+                    preview={{ src: `/api/v1/blobs/${text}` }}
+                  />
+                );
+              } else {
+                // 非图片文件显示对应图标
+                const fileIcon = getFileIcon(text.content_type); // 根据MIME类型获取适当的图标
+                return (
+                  <a 
+                    href={`/api/v1/blobs/${text}?download=true`} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                  >
+                    {fileIcon} 下载
+                  </a>
+                );
+              }
+            }
+            // 其他类型字段正常显示
+            return text;
+          },
         }));
         dynamicColumns.push(
           { title: "创建时间", dataIndex: "created_at", key: "created_at" },
@@ -68,24 +136,51 @@ const DynamicDataPage = () => {
       const url = editingRecord
         ? `/api/dynamic_tables/${tableId}/dynamic_records/${editingRecord.id}`
         : `/api/dynamic_tables/${tableId}/dynamic_records`;
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ record: values }),
+  
+      const formData = new FormData();
+      
+      // 处理普通字段
+      Object.keys(values).forEach(key => {
+        // 跳过文件字段，它们会被特殊处理
+        if (!key.endsWith('_file')) {
+          formData.append(`record[${key}]`, values[key]);
+        }
       });
-
+      
+      // 特殊处理文件字段
+      fields.forEach(field => {
+        if (field.field_type === 'file') {
+          const fileKey = `${field.name}_file`;
+          const fileList = values[fileKey];
+          
+          if (fileList && fileList.length > 0 && fileList[0].originFileObj) {
+            // 直接将文件对象添加到 FormData
+            formData.append(`record[${field.name}]`, fileList[0].originFileObj);
+          }
+        }
+      });
+  
+      // 设置请求选项
+      const requestOptions = {
+        method,
+        body: formData,
+        // 重要：不要设置 Content-Type，让浏览器自动设置
+      };
+  
+      const response = await fetch(url, requestOptions);
+  
       if (response.ok) {
         message.success(editingRecord ? "数据更新成功" : "数据保存成功");
         setModalVisible(false);
         setEditingRecord(null);
+        form.resetFields();
         fetchTableData();
       } else {
-        message.error(editingRecord ? "数据更新失败" : "数据保存失败");
+        const errorData = await response.json();
+        message.error(errorData.error || (editingRecord ? "数据更新失败" : "数据保存失败"));
       }
     } catch (err) {
+      console.error("保存数据错误:", err);
       message.error(editingRecord ? "数据更新失败" : "数据保存失败");
     }
   };
@@ -110,7 +205,20 @@ const DynamicDataPage = () => {
 
   const handleEdit = (record) => {
     setEditingRecord(record);
-    form.setFieldsValue(record);
+    
+    // 创建一个新的表单值对象
+    const formValues = { ...record };
+    
+    // 处理文件字段
+    fields.forEach(field => {
+      if (field.field_type === 'file' && record[field.name]) {
+        // 如果有文件字段，设置一个空的 fileList
+        // 实际文件会在其他地方处理（例如显示预览或下载链接）
+        formValues[`${field.name}_file`] = [];
+      }
+    });
+    
+    form.setFieldsValue(formValues);
     setModalVisible(true);
   };
 
@@ -118,6 +226,59 @@ const DynamicDataPage = () => {
     return fields.map((field) => {
       let inputComponent;
       switch (field.field_type) {
+        case "file":
+          inputComponent = (
+            <>
+              <Form.Item
+                noStyle
+                name={`${field.name}_file`}
+                valuePropName="fileList"
+                getValueFromEvent={e => {
+                  if (Array.isArray(e)) {
+                    return e;
+                  }
+                  return e?.fileList;
+                }}
+              >
+                <Upload
+                  beforeUpload={() => false}
+                  maxCount={1}
+                  listType="picture"
+                  accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
+                >
+                  <Button icon={<UploadOutlined />}>上传文件</Button>
+                </Upload>
+              </Form.Item>
+              
+              {/* 显示已上传的文件 */}
+              {editingRecord && editingRecord[field.name] && (
+                <div style={{ marginTop: 8 }}>
+                  {/\.(jpg|jpeg|png|gif|webp)$/i.test(editingRecord[field.name]) ? (
+                    // 图片预览
+                    <div>
+                      <p>已上传图片：</p>
+                      <Image 
+                        src={`/api/blobs/${editingRecord[field.name]}`} 
+                        alt="已上传图片"
+                        width={100}
+                        style={{ objectFit: 'cover' }}
+                      />
+                    </div>
+                  ) : (
+                    // 文件下载链接
+                    <a 
+                      href={`/api/blobs/${editingRecord[field.name]}`} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                    >
+                      查看已上传文件
+                    </a>
+                  )}
+                </div>
+              )}
+            </>
+          );
+          break;
         case "integer":
           inputComponent = <Input type="number" placeholder={`请输入 ${field.name}`} />;
           break;

@@ -32,6 +32,33 @@ begin
 rescue ActiveRecord::PendingMigrationError => e
   abort e.to_s.strip
 end
+
+def create_test_image
+  require 'fileutils'
+  fixtures_dir = Rails.root.join('spec', 'fixtures', 'files')
+  FileUtils.mkdir_p(fixtures_dir)
+
+  test_image_path = fixtures_dir.join('test_image.jpg')
+  unless File.exist?(test_image_path)
+    # 创建一个简单的测试图片
+    File.open(test_image_path, 'wb') do |f|
+      # 最小的有效JPG图片头
+      f.write([
+        0xFF, 0xD8,                     # SOI marker
+        0xFF, 0xE0,                     # APP0 marker
+        0x00, 0x10,                     # APP0 header size (16 bytes)
+        0x4A, 0x46, 0x49, 0x46, 0x00,   # Identifier: "JFIF\0"
+        0x01, 0x01,                     # Version: 1.1
+        0x00,                           # Density units: 0 (no units)
+        0x00, 0x01, 0x00, 0x01,         # Density: 1x1
+        0x00, 0x00,                     # Thumbnail: 0x0
+        0xFF, 0xD9                      # EOI marker
+      ].pack('C*'))
+    end
+    puts "Created test image at #{test_image_path}"
+  end
+end
+
 RSpec.configure do |config|
   # Remove this line if you're not using ActiveRecord or ActiveRecord fixtures
   config.fixture_paths = [
@@ -76,5 +103,8 @@ RSpec.configure do |config|
     DatabaseCleaner.cleaning do
       example.run
     end
+  end
+  config.before(:suite) do
+    create_test_image
   end
 end

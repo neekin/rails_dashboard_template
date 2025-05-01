@@ -3,6 +3,38 @@ module Api
     def create
       table = DynamicTable.find(params[:dynamic_table_id])
       record_params = permitted_record_params.to_h # 转换为普通哈希
+      # 添加更详细的日志
+      Rails.logger.debug "Request content type: #{request.content_type}"
+      Rails.logger.debug "Raw parameters: #{params.inspect}"
+      Rails.logger.debug "Record params: #{record_params.inspect}"
+
+
+      # 处理文件字段
+      file_fields = table.dynamic_fields.where(field_type: "file").pluck(:name)
+      Rails.logger.debug "File fields from DB: #{file_fields.inspect}"
+
+      file_fields.each do |file_field|
+        Rails.logger.debug "Processing file field: #{file_field}"
+        if record_params[file_field].present?
+          uploaded_file = record_params[file_field]
+          Rails.logger.debug "Uploaded file object class: #{uploaded_file.class.name}"
+          Rails.logger.debug "Uploaded file details: #{uploaded_file.inspect}"
+
+          # 检查文件对象
+          if uploaded_file.is_a?(ActionDispatch::Http::UploadedFile)
+            record_params[file_field] = ActiveStorage::Blob.create_and_upload!(
+              io: uploaded_file.tempfile,
+              filename: uploaded_file.original_filename,
+              content_type: uploaded_file.content_type
+            ).signed_id
+            Rails.logger.debug "File successfully processed and stored with signed_id"
+          else
+            Rails.logger.error "Invalid file format for field: #{file_field}"
+            render json: { error: "Invalid file format for field: #{file_field}" }, status: :unprocessable_entity
+            return
+          end
+        end
+      end
 
       # 获取字段定义
       fields = table.dynamic_fields.select(:name, :field_type).map { |field| [ field.name, field.field_type ] }.to_h
@@ -131,10 +163,41 @@ module Api
       table = DynamicTable.find(params[:dynamic_table_id])
       record_id = params[:id]
       record_params = permitted_record_params.to_h # 转换为普通哈希
-
+      # 添加更详细的日志
+      Rails.logger.debug "Request content type: #{request.content_type}"
+      Rails.logger.debug "Raw parameters: #{params.inspect}"
+      Rails.logger.debug "Record params: #{record_params.inspect}"
       # 获取字段定义
       fields = table.dynamic_fields.select(:name, :field_type).map { |field| [ field.name, field.field_type ] }.to_h
 
+
+
+      # 处理文件字段
+      file_fields = table.dynamic_fields.where(field_type: "file").pluck(:name)
+      Rails.logger.debug "File fields from DB: #{file_fields.inspect}"
+
+      file_fields.each do |file_field|
+        Rails.logger.debug "Processing file field: #{file_field}"
+        if record_params[file_field].present?
+          uploaded_file = record_params[file_field]
+          Rails.logger.debug "Uploaded file object class: #{uploaded_file.class.name}"
+          Rails.logger.debug "Uploaded file details: #{uploaded_file.inspect}"
+
+          # 检查文件对象
+          if uploaded_file.is_a?(ActionDispatch::Http::UploadedFile)
+            record_params[file_field] = ActiveStorage::Blob.create_and_upload!(
+              io: uploaded_file.tempfile,
+              filename: uploaded_file.original_filename,
+              content_type: uploaded_file.content_type
+            ).signed_id
+            Rails.logger.debug "File successfully processed and stored with signed_id"
+          else
+            Rails.logger.error "Invalid file format for field: #{file_field}"
+            render json: { error: "Invalid file format for field: #{file_field}" }, status: :unprocessable_entity
+            return
+          end
+        end
+      end
       # 根据字段类型转换参数值
       updates = record_params.map do |key, value|
         field_type = fields[key]

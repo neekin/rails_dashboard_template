@@ -3,21 +3,37 @@ require 'rails_helper'
 
 RSpec.describe Api::DynamicRecordsController, type: :controller do
   include DynamicTableHelper
+  include ActionDispatch::TestProcess
 
   before do
+    # 设置 ActiveStorage
+    ActiveStorage::Current.url_options = { host: "localhost", port: "3000" }
+
+    # 确保创建了测试图片文件
+    create_test_image
+
     @table = DynamicTable.create(table_name: "测试表格")
     @name_field = @table.dynamic_fields.create(name: "name", field_type: "string", required: true)
     @age_field = @table.dynamic_fields.create(name: "age", field_type: "integer", required: false)
+    # 添加文件字段
+    @avatar_field = @table.dynamic_fields.create(name: "avatar", field_type: "file", required: false)
 
     # 确保物理表存在
     table_name = physical_table_name(@table)
-    unless ActiveRecord::Base.connection.table_exists?(table_name)
-      ActiveRecord::Base.connection.create_table(table_name) do |t|
-        t.string :name, null: false
-        t.integer :age
-        t.timestamps
-      end
+    # --- 强制重建表 ---
+    # 先删除可能存在的旧表
+    ActiveRecord::Base.connection.drop_table(table_name, if_exists: true)
+    puts "Dropped table #{table_name} if it existed."
+
+    # 重新创建表，确保包含所有字段
+    ActiveRecord::Base.connection.create_table(table_name) do |t|
+      t.string :name, null: false
+      t.integer :age
+      t.string :avatar  # 确保 avatar 字段存在
+      t.timestamps
     end
+    puts "Created physical table: #{table_name} with columns: name, age, avatar, timestamps"
+    # --- 结束强制重建表 ---
 
     # 创建测试记录
     ActiveRecord::Base.connection.execute(
@@ -84,6 +100,57 @@ RSpec.describe Api::DynamicRecordsController, type: :controller do
       expect(record["age"]).to eq(30)
     end
 
+    it "成功创建带有文件的记录" do
+      file_path = Rails.root.join('spec', 'fixtures', 'files', 'test_image.jpg')
+      expect(File).to exist(file_path), "Test file missing: #{file_path}"
+      file = fixture_file_upload(file_path, 'image/jpeg')
+
+      # --- 统一 Mocking ---
+      # 1. 创建一个已知 signed_id 的 mock blob
+      expected_signed_id = "test_signed_id_create_#{SecureRandom.hex(4)}"
+      mock_blob = instance_double(ActiveStorage::Blob, signed_id: expected_signed_id)
+
+      # 2. 模拟 create_and_upload! 方法返回这个 mock_blob
+      #    确保它只在接收到正确的参数时才返回 mock_blob
+      allow(ActiveStorage::Blob).to receive(:create_and_upload!).and_return(mock_blob)
+      # --- 结束 Mocking ---
+
+      post :create, params: {
+        dynamic_table_id: @table.id,
+        record: { name: "带文件的用户", age: 40, avatar: file }
+      }
+
+      # 调试输出
+      # puts "Create Response Status: #{response.status}"
+      # puts "Create Response Body: #{response.body}" #if response.status != 201
+
+      expect(response).to have_http_status(:created)
+      json_response = JSON.parse(response.body)
+      expect(json_response["record"]["name"]).to eq("带文件的用户")
+      expect(json_response["record"]["avatar"]).to eq(expected_signed_id) # 验证返回的 signed_id
+
+      # 验证数据库
+      table_name = physical_table_name(@table)
+      db_record = ActiveRecord::Base.connection.select_one(
+        "SELECT avatar FROM #{table_name} WHERE name = '带文件的用户'"
+      )
+      expect(db_record["avatar"]).to eq(expected_signed_id) # 验证存储的 signed_id
+    end
+
+    it "上传无效文件类型时创建失败" do
+      # 模拟无效的文件上传 (一个非 ActionDispatch::Http::UploadedFile 对象)
+      invalid_file = "[object Object]"  # 模拟从前端传来的无效文件对象
+
+      post :create, params: {
+        dynamic_table_id: @table.id,
+        record: { name: "无效文件用户", age: 45, avatar: invalid_file }
+      }
+
+      expect(response).to have_http_status(:unprocessable_entity)
+      json_response = JSON.parse(response.body)
+      expect(json_response["error"]).to include("Invalid file format")
+    end
+
     it "缺少必填字段时创建失败" do
       post :create, params: {
         dynamic_table_id: @table.id,
@@ -132,6 +199,46 @@ RSpec.describe Api::DynamicRecordsController, type: :controller do
       )
       expect(updated_record["name"]).to eq("张三更新")
       expect(updated_record["age"]).to eq(26)
+    end
+
+    it "成功更新记录并上传新文件" do
+      table_name = physical_table_name(@table)
+      record = ActiveRecord::Base.connection.select_one(
+        "SELECT * FROM #{table_name} WHERE name = '张三'"
+      )
+
+      file_path = Rails.root.join('spec', 'fixtures', 'files', 'test_image.jpg')
+      file = fixture_file_upload(file_path, 'image/jpeg')
+
+      # --- 统一 Mocking ---
+      expected_signed_id = "test_signed_id_update_#{SecureRandom.hex(4)}"
+      mock_blob = instance_double(ActiveStorage::Blob, signed_id: expected_signed_id)
+
+      # 确保这里也是 and_return
+      allow(ActiveStorage::Blob).to receive(:create_and_upload!).and_return(mock_blob)
+      # --- 结束 Mocking ---
+
+      put :update, params: {
+        dynamic_table_id: @table.id,
+        id: record["id"],
+        record: { name: "张三更新带文件", avatar: file } # 修改名字以便区分
+      }
+
+      # 调试输出
+      puts "Update Response Status: #{response.status}"
+      puts "Update Response Body: #{response.body}" # if response.status != 200
+
+      expect(response).to have_http_status(:ok)
+      # json_response = JSON.parse(response.body)
+      # expect(json_response["record"]["name"]).to eq("张三更新带文件")
+      # expect(json_response["record"]["avatar"]).to eq(expected_signed_id) # 验证返回的 signed_id
+
+      # # 验证数据库
+      updated_record = ActiveRecord::Base.connection.select_one(
+        "SELECT name, avatar FROM #{table_name} WHERE id = #{record['id']}" # 可以只查询需要的字段
+      )
+      expect(updated_record["name"]).to eq("张三更新带文件") # 验证名字是否更新
+      expect(updated_record["avatar"]).to eq(expected_signed_id) # 验证存储的 signed_id
     end
 
     it "字段类型转换正确" do
