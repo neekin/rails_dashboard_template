@@ -6,7 +6,12 @@ Rails.application.routes.draw do
     get "profile", to: "profiles#show"
     resources :dynamic_tables do
       resources :dynamic_fields, only: [ :index, :create ]
-      resources :dynamic_records, only: [ :index, :create, :update, :destroy ]
+      resources :dynamic_records, only: [ :index, :create, :update, :destroy ] do
+        member do
+          get "files/:field_name", to: "dynamic_records#serve_file"
+          get "files/:field_name/*filename", to: "dynamic_records#serve_file"
+        end
+      end
     end
     namespace :v1 do
       get "blobs/:signed_id", to: "blobs#show", as: :blob
@@ -17,6 +22,12 @@ Rails.application.routes.draw do
       put "/:identifier/:id", to: "dynamic_api#update"
       patch "/:identifier/:id", to: "dynamic_api#update"
       delete "/:identifier/:id", to: "dynamic_api#destroy"
+      resources :identifier, controller: "dynamic_api", path: ":identifier", only: [ :index, :show, :create, :update, :destroy ] do
+          member do
+                    get "files/:field_name", to: "dynamic_api#serve_file"
+                    get "files/:field_name/*filename", to: "dynamic_api#serve_file"
+          end
+      end
     end
   end
   root "pages#home"

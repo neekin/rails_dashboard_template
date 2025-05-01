@@ -60,3 +60,5 @@ gem "vite_rails", "~> 3.0"
 
 gem "jwt"
 gem "rack-cors"
+
+gem "aws-sdk-s3", "~> 1.184"

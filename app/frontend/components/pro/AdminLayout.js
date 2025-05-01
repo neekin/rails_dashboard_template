@@ -441,7 +441,7 @@ export default () => {
                             </ProCard>
                         </PageContainer>
 
-                        <SettingDrawer
+                        {/* <SettingDrawer
                             pathname={pathname}
                             enableDarkTheme
                             getContainer={(e) => {
@@ -453,7 +453,7 @@ export default () => {
                                 setSetting(changeSetting);
                             }}
                             disableUrlParams={false}
-                        />
+                        /> */}
                     </ProLayout>
                 </ConfigProvider>
             </ProConfigProvider>

@@ -1,5 +1,65 @@
 module Api
   class DynamicRecordsController < ApiController
+    def serve_file
+      table = DynamicTable.find(params[:dynamic_table_id])
+      record_id = params[:id]
+      field_name = params[:field_name].to_s.split("/").first
+
+      # 验证字段是否存在且为文件类型
+      dynamic_field = table.dynamic_fields.find_by(name: field_name, field_type: "file")
+      unless dynamic_field
+        render json: { error: "无效的文件字段: #{field_name}" }, status: :not_found
+        return
+      end
+
+      # 获取记录中的 signed_id
+      query = "SELECT #{field_name} FROM dyn_#{table.id} WHERE id = #{record_id}"
+      record_data = ActiveRecord::Base.connection.select_one(query)
+
+      unless record_data && record_data[field_name].present?
+        render json: { error: "记录 ##{record_id} 没有字段 '#{field_name}' 的文件" }, status: :not_found
+        return
+      end
+
+      signed_id = record_data[field_name]
+
+      # 查找 Active Storage Blob
+      begin
+        blob = ActiveStorage::Blob.find_signed!(signed_id)
+      rescue ActiveSupport::MessageVerifier::InvalidSignature, ActiveRecord::RecordNotFound
+        render json: { error: "无法找到或验证文件" }, status: :not_found
+        return
+      end
+
+      # 根据环境和存储服务类型决定服务方式
+      begin
+        # 检查是否是 S3 兼容服务
+        is_s3_service = defined?(ActiveStorage::Service::S3Service) && blob.service.is_a?(ActiveStorage::Service::S3Service)
+
+        # 使用配置项判断是否启用重定向策略，并且当前服务是 S3 兼容的
+        if Rails.application.config.x.file_serving_strategy == :redirect && is_s3_service
+          # --- 重定向策略 (MinIO/S3): 生成预签名 URL 并重定向 ---
+          expires_in = 10.minutes
+          disposition_param = params[:disposition] == "attachment" ? :attachment : :inline
+          redirect_url = blob.url(expires_in: expires_in, disposition: disposition_param)
+          redirect_to redirect_url, allow_other_host: true, status: :found
+        else
+          # --- 流式传输策略 (Rails send_data): 适用于 Disk 服务或明确配置为 :stream ---
+          data = blob.download
+          disposition_param = params[:disposition] == "attachment" ? "attachment" : "inline"
+          send_data data,
+                    filename: blob.filename.to_s,
+                    content_type: blob.content_type,
+                    disposition: disposition_param
+        end
+      rescue ActiveStorage::FileNotFoundError
+        render json: { error: "文件在存储服务中未找到" }, status: :not_found
+      rescue => e
+        Rails.logger.error "Error serving file blob #{blob.key}: #{e.message}\n#{e.backtrace.join("\n")}"
+        render json: { error: "无法提供文件" }, status: :internal_server_error
+      end
+    end
+
     def create
       table = DynamicTable.find(params[:dynamic_table_id])
       record_params = permitted_record_params.to_h # 转换为普通哈希
@@ -123,7 +183,7 @@ module Api
       end
 
       # 获取查询参数
-      query_params = params.permit(:current, :pageSize, :query).to_h
+      query_params = params.permit(:current, :pageSize, :query, :dynamic_table_id).to_h
       current_page = query_params["current"].to_i > 0 ? query_params["current"].to_i : 1
       page_size = query_params["pageSize"].to_i > 0 ? query_params["pageSize"].to_i : 10
 
@@ -143,6 +203,33 @@ module Api
       # 执行查询
       data = ActiveRecord::Base.connection.select_all(query).to_a
 
+      # 获取文件字段列表
+      file_fields = table.dynamic_fields.where(field_type: "file").pluck(:name)
+
+      # 处理文件字段，替换 signed_id 为文件 URL
+      if file_fields.any?
+        data.each do |record|
+          file_fields.each do |field|
+            signed_id = record[field]
+            if signed_id.present?
+              begin
+                record[field] = dynamic_record_file_url(
+                  table_id: table.id,
+                  id: record["id"],
+                  field_name: field,
+                  host: request.host_with_port,
+                  signed_id: signed_id
+                )
+              rescue => e
+                Rails.logger.error "Error generating file URL for record #{record["id"]}, field #{field}: #{e.message}"
+                record[field] = nil
+              end
+            else
+              record[field] = nil
+            end
+          end
+        end
+      end
       # 获取总记录数
       total_count_query = "SELECT COUNT(*) AS count FROM #{table_name}"
       total_count_query += " WHERE #{where_clauses.join(' AND ')}" if where_clauses.any?
@@ -250,7 +337,30 @@ module Api
     end
 
     private
+    def dynamic_record_file_url(options = {})
+      table_id = options[:table_id]
+      id = options[:id]
+      field_name = options[:field_name]
+      # host = options[:host] # 不再需要 host，生成相对路径
+      signed_id = options[:signed_id]
 
+      # 基础 URL 指向 Rails 的 serve_file 动作 (相对路径)
+      url = "/api/dynamic_tables/#{table_id}/dynamic_records/#{id}/files/#{field_name}"
+
+      # 尝试获取原始文件名并附加到 URL 路径末尾
+      if signed_id.present?
+        begin
+          blob = ActiveStorage::Blob.find_signed(signed_id) # 使用 find_signed 避免抛错
+          if blob&.filename.present?
+            url += "/#{CGI.escape(blob.filename.to_s)}"
+          end
+        rescue => e
+          Rails.logger.error "Error getting filename for signed_id #{signed_id} in URL generation: #{e.message}"
+        end
+      end
+
+      url # 返回相对路径
+    end
     # 允许的参数
     def permitted_record_params
       params.require(:record).permit!

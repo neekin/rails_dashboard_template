@@ -19,36 +19,11 @@ const DynamicDataPage = () => {
   const [modalVisible, setModalVisible] = useState(false);
   const [editingRecord, setEditingRecord] = useState(null);
   const [form] = Form.useForm();
+  const [loading, setLoading] = useState(false);
 
   const fetchTableData = async (params = {}) => {
     try {
-      const getFileIcon = (contentType) => {
-        if (!contentType) return <FileOutlined style={{ fontSize: '24px' }} />;
-        
-        // 根据MIME类型返回对应图标
-        if (contentType.startsWith('application/pdf')) {
-          return <FilePdfOutlined style={{ fontSize: '24px', color: '#ff4d4f' }} />;
-        } else if (
-          contentType.includes('word') || 
-          contentType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
-          contentType === 'application/msword'
-        ) {
-          return <FileWordOutlined style={{ fontSize: '24px', color: '#1890ff' }} />;
-        } else if (
-          contentType.includes('excel') || 
-          contentType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-          contentType === 'application/vnd.ms-excel'
-        ) {
-          return <FileExcelOutlined style={{ fontSize: '24px', color: '#52c41a' }} />;
-        } else if (contentType.startsWith('image/')) {
-          // 这里不应该匹配到，因为图片会单独处理
-          return <FileOutlined style={{ fontSize: '24px', color: '#722ed1' }} />;
-        } else {
-          // 默认文件图标
-          return <FileOutlined style={{ fontSize: '24px' }} />;
-        }
-      };
-
+      console.log("Fetching table data...",params);
       const response = await apiFetch(
        `/api/dynamic_tables/${tableId}/dynamic_records?query=${JSON.stringify(params)}`
       );
@@ -60,38 +35,43 @@ const DynamicDataPage = () => {
           dataIndex: field.name,
           key: field.name,
           render: (text, record) => {
-            // 如果是文件类型，显示预览或下载链接
-            if (field.field_type === 'file' && text) {
-              console.log("text",text)
-              const isImage = text.content_type?.startsWith('image/');
-              
-              if (isImage) {
-                return (
-                  <Image 
-                    src={`/api/v1/blobs/${text}`} 
-                    alt={field.name}
-                    width={50}
-                    height={50}
-                    style={{ objectFit: 'cover' }}
-                    preview={{ src: `/api/v1/blobs/${text}` }}
-                  />
-                );
-              } else {
-                // 非图片文件显示对应图标
-                const fileIcon = getFileIcon(text.content_type); // 根据MIME类型获取适当的图标
-                return (
-                  <a 
-                    href={`/api/v1/blobs/${text}?download=true`} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                  >
-                    {fileIcon} 下载
-                  </a>
-                );
+              // 如果是文件类型，显示预览或下载链接
+              if (field.field_type === 'file' && text) {
+                // 从 URL 中提取文件名和扩展名
+                const urlParts = text.split('/');
+                const fileName = urlParts[urlParts.length - 1]; // 获取 URL 最后的部分作为文件名
+                const fileExt = fileName.split('.').pop().toLowerCase(); // 提取扩展名
+                
+                // 根据文件扩展名判断文件类型
+                const isImage = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'].includes(fileExt);
+                
+                if (isImage) {
+                  return (
+                    <Image 
+                      src={text} 
+                      alt={field.name}
+                      width={50}
+                      height={50}
+                      style={{ objectFit: 'cover' }}
+                      preview={{ src: text }}
+                    />
+                  );
+                } else {
+                  // 非图片文件，根据扩展名显示对应图标
+                  const fileIcon = getFileIconByExt(fileExt);
+                  return (
+                    <a 
+                      href={`${text}?disposition=attachment`} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                    >
+                      {fileIcon} {fileName}
+                    </a>
+                  );
+                }
               }
-            }
-            // 其他类型字段正常显示
-            return text;
+              // 其他类型字段正常显示
+              return text;
           },
         }));
         dynamicColumns.push(
@@ -130,8 +110,36 @@ const DynamicDataPage = () => {
     }
   };
 
+  const getFileIconByExt = (fileExt) => {
+    if (!fileExt) return <FileOutlined style={{ fontSize: '24px' }} />;
+    
+    // 根据文件扩展名返回对应图标
+    switch(fileExt) {
+      case 'pdf':
+        return <FilePdfOutlined style={{ fontSize: '24px', color: '#ff4d4f' }} />;
+      case 'doc':
+      case 'docx':
+        return <FileWordOutlined style={{ fontSize: '24px', color: '#1890ff' }} />;
+      case 'xls':
+      case 'xlsx':
+      case 'csv':
+        return <FileExcelOutlined style={{ fontSize: '24px', color: '#52c41a' }} />;
+      case 'jpg':
+      case 'jpeg':
+      case 'png':
+      case 'gif':
+      case 'webp':
+      case 'bmp':
+      case 'svg':
+        return <FileOutlined style={{ fontSize: '24px', color: '#722ed1' }} />;
+      default:
+        return <FileOutlined style={{ fontSize: '24px' }} />;
+    }
+  };
+
   const handleSaveData = async (values) => {
     try {
+      setLoading(true);
       const method = editingRecord ? "PUT" : "POST";
       const url = editingRecord
         ? `/api/dynamic_tables/${tableId}/dynamic_records/${editingRecord.id}`
@@ -182,6 +190,9 @@ const DynamicDataPage = () => {
     } catch (err) {
       console.error("保存数据错误:", err);
       message.error(editingRecord ? "数据更新失败" : "数据保存失败");
+    }
+    finally{
+      setLoading(false);
     }
   };
 
@@ -258,7 +269,7 @@ const DynamicDataPage = () => {
                     <div>
                       <p>已上传图片：</p>
                       <Image 
-                        src={`/api/blobs/${editingRecord[field.name]}`} 
+                        src={`${editingRecord[field.name]}`} 
                         alt="已上传图片"
                         width={100}
                         style={{ objectFit: 'cover' }}
@@ -267,7 +278,7 @@ const DynamicDataPage = () => {
                   ) : (
                     // 文件下载链接
                     <a 
-                      href={`/api/blobs/${editingRecord[field.name]}`} 
+                      href={`${editingRecord[field.name]}`} 
                       target="_blank" 
                       rel="noopener noreferrer"
                     >
@@ -364,6 +375,7 @@ const DynamicDataPage = () => {
               <Button
                 key="submit"
                 type="primary"
+                loading={loading}
                 onClick={() => {
                   form.validateFields().then((values) => {
                     handleSaveData(values);
