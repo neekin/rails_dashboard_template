@@ -1,0 +1,25 @@
+### getAll 
+GET http://127.0.0.1:3000/api/v1/ttt?token=nWKTpdsBE7C7xsB3oDBt1tQQ
+
+### create a record
+POST http://127.0.0.1:3000/api/v1/ttt?token=nWKTpdsBE7C7xsB3oDBt1tQQ
+Content-Type: application/json
+
+{
+  "name": "John Doe",
+  "age": 30
+}
+
+
+
+### Update a record
+PUT http://127.0.0.1:3000/api/v1/ttt/1?token=nWKTpdsBE7C7xsB3oDBt1tQQ
+Content-Type: application/json
+
+{
+  "name": "NeeKin",
+  "age": 25
+}
+
+### delete a record
+DELETE http://127.0.0.1:3000/api/v1/ttt/1?token=nWKTpdsBE7C7xsB3oDBt1tQQ

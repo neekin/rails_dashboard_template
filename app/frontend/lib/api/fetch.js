@@ -58,7 +58,7 @@ async function apiFetch(path, options = {}) {
   }
 
   const headers = {
-    'Content-Type': 'application/json',
+    // 'Content-Type': 'application/json',
     ...(options.headers || {}),
   };
 
@@ -83,7 +83,12 @@ async function apiFetch(path, options = {}) {
     throw new Error(errorData.message || 'API请求失败');
   }
 
-  return response.json();
+  if (response.headers.get("Content-Type")?.includes("application/json")) {
+    // console.log(typeof response.json())
+    return response.json();
+  } else {
+    return response; // 如果不是 JSON 响应，返回 null 或其他默认值
+  }
 }
 
 function startBackgroundRefresh() {

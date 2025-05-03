@@ -61,29 +61,7 @@ module Api
 
     private
 
-    # 校验当前用户是否拥有指定的 AppEntity 和 DynamicTable
-    def validate_user_ownership!
-      dynamic_table = DynamicTable.find_by(id: params[:dynamic_table_id])
-      unless dynamic_table
-        render json: { error: "表格不存在" }, status: :not_found
-        return
-      end
 
-      app_entity = dynamic_table.app_entity
-      unless app_entity
-        render json: { error: "应用不存在" }, status: :not_found
-        return
-      end
-
-      unless app_entity.user_id == current_user.id
-        render json: { error: "您无权操作此表格所属的应用" }, status: :forbidden
-        return
-      end
-
-      # 设置实例变量供后续方法使用
-      @dynamic_table = dynamic_table
-      @app_entity = app_entity
-    end
 
     def update_existing_field(field, dynamic_table, updated_or_created_fields)
       existing_field = DynamicField.find(field[:id])

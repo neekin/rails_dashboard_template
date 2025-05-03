@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_05_03_202837) do
+ActiveRecord::Schema[8.0].define(version: 2025_05_03_210552) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -82,6 +82,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_05_03_202837) do
     t.datetime "updated_at", null: false
     t.string "api_identifier"
     t.integer "app_entity_id", null: false
+    t.string "webhook_url"
     t.index ["api_identifier"], name: "index_dynamic_tables_on_api_identifier", unique: true
     t.index ["app_entity_id"], name: "index_dynamic_tables_on_app_entity_id"
   end

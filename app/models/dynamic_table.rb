@@ -15,6 +15,9 @@ class DynamicTable < ApplicationRecord
               allow_blank: true
             }
 
+  # 添加 webhook_url 验证
+  validates :webhook_url, format: { with: URI::DEFAULT_PARSER.make_regexp(%w[http https]), message: "必须是有效的 URL" }, allow_blank: true
+
   # 获取API路径
   def api_path
     "/api/v1/#{api_identifier.presence || table_name.downcase}"

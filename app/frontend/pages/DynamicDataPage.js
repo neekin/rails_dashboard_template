@@ -148,35 +148,36 @@ const DynamicDataPage = () => {
       const formData = new FormData();
       
       // 处理普通字段
-      Object.keys(values).forEach(key => {
-        // 跳过文件字段，它们会被特殊处理
-        if (!key.endsWith('_file')) {
+      Object.keys(values).forEach((key) => {
+        if (!key.endsWith("_file") && values[key] !== undefined && values[key] !== null) {
           formData.append(`record[${key}]`, values[key]);
         }
       });
+      formData.append("dynamic_table_id", tableId);
       
-      // 特殊处理文件字段
-      fields.forEach(field => {
-        if (field.field_type === 'file') {
-          const fileKey = `${field.name}_file`;
-          const fileList = values[fileKey];
-          
-          if (fileList && fileList.length > 0 && fileList[0].originFileObj) {
-            // 直接将文件对象添加到 FormData
-            formData.append(`record[${field.name}]`, fileList[0].originFileObj);
+      // 特殊处理文件字段（仅当存在文件字段时）
+      if (fields && fields.some((field) => field.field_type === "file")) {
+        fields.forEach((field) => {
+          if (field.field_type === "file") {
+            const fileKey = `${field.name}_file`;
+            const fileList = values[fileKey];
+
+            if (fileList && fileList.length > 0 && fileList[0].originFileObj) {
+              // 直接将文件对象添加到 FormData
+              formData.append(`record[${field.name}]`, fileList[0].originFileObj);
+            }
           }
-        }
-      });
+        });
+      }
   
       // 设置请求选项
       const requestOptions = {
         method,
         body: formData,
-        // 重要：不要设置 Content-Type，让浏览器自动设置
       };
   
-      const response = await fetch(url, requestOptions);
-  
+      const response = await apiFetch(url, requestOptions);
+      console.log("Response:", response);
       if (response.ok) {
         message.success(editingRecord ? "数据更新成功" : "数据保存成功");
         setModalVisible(false);
@@ -198,7 +199,7 @@ const DynamicDataPage = () => {
 
   const handleDelete = async (id) => {
     try {
-      const response = await fetch(
+      const response = await apiFetch(
         `/api/dynamic_tables/${tableId}/dynamic_records/${id}`,
         { method: "DELETE" }
       );

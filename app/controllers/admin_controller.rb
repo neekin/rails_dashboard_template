@@ -30,4 +30,31 @@ class AdminController < ActionController::API
       email: user.email
     }
   end
+  # 校验当前用户是否拥有指定的 AppEntity 和 DynamicTable
+  def validate_user_ownership!
+    dynamic_table = DynamicTable.find_by(id: params[:dynamic_table_id])
+    unless dynamic_table
+      Rails.logger.error "DynamicTable not found for id: #{params[:dynamic_table_id]}"
+      render json: { error: "表格不存在" }, status: :not_found
+      return
+    end
+
+
+    app_entity = dynamic_table.app_entity
+    unless app_entity
+      Rails.logger.error "AppEntity not found for DynamicTable id: #{dynamic_table.id}"
+      render json: { error: "应用不存在" }, status: :not_found
+      return
+    end
+
+    unless app_entity.user_id == current_user.id
+      Rails.logger.error "Unauthorized access by user #{current_user.id} for AppEntity id: #{app_entity.id}"
+      render json: { error: "您无权操作此表格所属的应用" }, status: :forbidden
+      return
+    end
+
+    # 设置实例变量供后续方法使用
+    @dynamic_table = dynamic_table
+    @app_entity = app_entity
+  end
 end

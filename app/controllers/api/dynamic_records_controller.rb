@@ -62,16 +62,23 @@ module Api
     end
 
     def create
-      table = DynamicTable.find(params[:dynamic_table_id])
-      record_params = permitted_record_params.to_h # 转换为普通哈希
+      # table = DynamicTable.find(params[:dynamic_table_id])
+
+      # 动态解析请求参数
+      record_params = if request.content_type == "application/json"
+        JSON.parse(request.body.read).with_indifferent_access[:record]
+      else
+        permitted_record_params.to_h
+      end
+      # record_params = permitted_record_params.to_h # 转换为普通哈希
       # 添加更详细的日志
       Rails.logger.debug "Request content type: #{request.content_type}"
       Rails.logger.debug "Raw parameters: #{params.inspect}"
-      Rails.logger.debug "Record params: #{record_params.inspect}"
+      Rails.logger.debug "Record params: #{params[:record].inspect}"
 
 
       # 处理文件字段
-      file_fields = table.dynamic_fields.where(field_type: "file").pluck(:name)
+      file_fields = @dynamic_table.dynamic_fields.where(field_type: "file").pluck(:name)
       Rails.logger.debug "File fields from DB: #{file_fields.inspect}"
 
       file_fields.each do |file_field|
@@ -98,10 +105,10 @@ module Api
       end
 
       # 获取字段定义
-      fields = table.dynamic_fields.select(:name, :field_type).map { |field| [ field.name, field.field_type ] }.to_h
+      fields = @dynamic_table.dynamic_fields.select(:name, :field_type).map { |field| [ field.name, field.field_type ] }.to_h
 
       # 验证必填字段
-      required_fields = table.dynamic_fields.where(required: true).pluck(:name)
+      required_fields = @dynamic_table.dynamic_fields.where(required: true).pluck(:name)
       missing_fields = required_fields - record_params.keys
 
       if missing_fields.any?
@@ -116,7 +123,7 @@ module Api
       record_params.each do |key, value|
         field_type = fields[key]
         if field_type.nil?
-          Rails.logger.error "Field '#{key}' does not exist in table 'dyn_#{table.id}'"
+          Rails.logger.error "Field '#{key}' does not exist in table 'dyn_#{@dynamic_table.id}'"
           next
         end
 
@@ -147,21 +154,20 @@ module Api
       field_values << ActiveRecord::Base.connection.quote(current_time)
       field_values << ActiveRecord::Base.connection.quote(current_time)
 
-      sql = "INSERT INTO dyn_#{table.id} (#{field_names.join(', ')}) VALUES (#{field_values.join(', ')})"
+      sql = "INSERT INTO dyn_#{@dynamic_table.id} (#{field_names.join(', ')}) VALUES (#{field_values.join(', ')})"
       Rails.logger.info "Executing SQL: #{sql}"
 
       begin
         result = ActiveRecord::Base.connection.execute(sql)
         if result
           # 获取最新插入记录的ID
-          last_id_sql = "SELECT last_insert_rowid() as id"
-          last_id = ActiveRecord::Base.connection.select_one(last_id_sql)["id"]
+          # last_id_sql = "SELECT last_insert_rowid() as id"
+          # last_id = ActiveRecord::Base.connection.select_one(last_id_sql)["id"]
 
           # 返回新创建的记录
-          query = "SELECT * FROM dyn_#{table.id} WHERE id = #{last_id}"
-          new_record = ActiveRecord::Base.connection.select_one(query)
-
-          render json: { record: new_record }, status: :created
+          # query = "SELECT * FROM dyn_#{@dynamic_table.id} WHERE id = #{last_id}"
+          # new_record = ActiveRecord::Base.connection.select_one(query)
+          head :ok
         else
           render json: { error: "Failed to create record" }, status: :unprocessable_entity
         end
@@ -248,7 +254,7 @@ module Api
     end
 
     def update
-      table = DynamicTable.find(params[:dynamic_table_id])
+      # table = DynamicTable.find(params[:dynamic_table_id])
       record_id = params[:id]
       record_params = permitted_record_params.to_h # 转换为普通哈希
       # 添加更详细的日志
@@ -256,12 +262,12 @@ module Api
       Rails.logger.debug "Raw parameters: #{params.inspect}"
       Rails.logger.debug "Record params: #{record_params.inspect}"
       # 获取字段定义
-      fields = table.dynamic_fields.select(:name, :field_type).map { |field| [ field.name, field.field_type ] }.to_h
+      fields = @dynamic_table.dynamic_fields.select(:name, :field_type).map { |field| [ field.name, field.field_type ] }.to_h
 
 
 
       # 处理文件字段
-      file_fields = table.dynamic_fields.where(field_type: "file").pluck(:name)
+      file_fields = @dynamic_table.dynamic_fields.where(field_type: "file").pluck(:name)
       Rails.logger.debug "File fields from DB: #{file_fields.inspect}"
 
       file_fields.each do |file_field|
@@ -290,7 +296,7 @@ module Api
       updates = record_params.map do |key, value|
         field_type = fields[key]
         if field_type.nil?
-          Rails.logger.error "Field '#{key}' does not exist in table 'dyn_#{table.id}'"
+          Rails.logger.error "Field '#{key}' does not exist in table 'dyn_#{@dynamic_table.id}'"
           next
         end
 
@@ -312,7 +318,7 @@ module Api
         return
       end
 
-      sql = "UPDATE dyn_#{table.id} SET #{updates}, updated_at = #{ActiveRecord::Base.connection.quote(Time.current)} WHERE id = #{record_id}"
+      sql = "UPDATE dyn_#{@dynamic_table.id} SET #{updates}, updated_at = #{ActiveRecord::Base.connection.quote(Time.current)} WHERE id = #{record_id}"
       Rails.logger.info "Executing SQL: #{sql}"
 
       begin
@@ -329,39 +335,16 @@ module Api
     end
 
     def destroy
-      table = DynamicTable.find(params[:dynamic_table_id])
+      # table = DynamicTable.find(params[:dynamic_table_id])
       record_id = params[:id]
 
-      sql = "DELETE FROM dyn_#{table.id} WHERE id = #{record_id}"
+      sql = "DELETE FROM dyn_#{@dynamic_table.id} WHERE id = #{record_id}"
       ActiveRecord::Base.connection.execute(sql)
       head :ok
     end
 
     private
 
-    # 校验当前用户是否拥有指定的 AppEntity 和 DynamicTable
-    def validate_user_ownership!
-      dynamic_table = DynamicTable.find_by(id: params[:dynamic_table_id])
-      unless dynamic_table
-        render json: { error: "表格不存在" }, status: :not_found
-        return
-      end
-
-      app_entity = dynamic_table.app_entity
-      unless app_entity
-        render json: { error: "应用不存在" }, status: :not_found
-        return
-      end
-
-      unless app_entity.user_id == current_user.id
-        render json: { error: "您无权操作此表格所属的应用" }, status: :forbidden
-        return
-      end
-
-      # 设置实例变量供后续方法使用
-      @dynamic_table = dynamic_table
-      @app_entity = app_entity
-    end
 
     def dynamic_record_file_url(options = {})
       table_id = options[:table_id]

@@ -1,3 +1,4 @@
+require "net/http"
 module Api
   module V1
     class DynamicApiController < ApiController
@@ -9,6 +10,23 @@ module Api
       # 跳过 `authorize_app_entity!` 和 `find_table_by_identifier` 对 `serve_file` 方法的拦截
       skip_before_action :authorize_app_entity!, only: [ :serve_file ]
       skip_before_action :find_table_by_identifier, only: [ :serve_file ]
+      def trigger_webhook(event, payload)
+        webhook_url = @table.webhook_url # 假设每个 AppEntity 都有一个 webhook_url 字段
+        return unless webhook_url.present?
+
+        begin
+          uri = URI(webhook_url)
+          http = Net::HTTP.new(uri.host, uri.port)
+          http.use_ssl = (uri.scheme == "https")
+          request = Net::HTTP::Post.new(uri.path, { "Content-Type" => "application/json" })
+          request.body = { event: event, payload: payload }.to_json
+          response = http.request(request)
+
+          Rails.logger.info "Webhook triggered for event '#{event}': #{response.body}"
+        rescue => e
+          Rails.logger.error "Error triggering webhook for event '#{event}': #{e.message}"
+        end
+      end
 
       def serve_file
         app_id = params[:appId] # 从 URL 参数中获取 appId
@@ -207,6 +225,7 @@ module Api
         @record = model_class.new(record_params)
 
         if @record.save
+          trigger_webhook("create", @record)
           render json: @record, status: :created
         else
           render json: { error: @record.errors.full_messages.join(", ") }, status: :unprocessable_entity
@@ -216,6 +235,7 @@ module Api
       # PUT/PATCH /api/v1/:identifier/:id
       def update
         if @record.update(record_params)
+          trigger_webhook("update", @record)
           render json: @record
         else
           render json: { error: @record.errors.full_messages.join(", ") }, status: :unprocessable_entity
@@ -224,7 +244,10 @@ module Api
 
       # DELETE /api/v1/:identifier/:id
       def destroy
+        record_data = @record.attributes
         @record.destroy
+        # 触发 Webhook 回调
+        trigger_webhook("destroy", record_data)
         head :no_content
       end
 

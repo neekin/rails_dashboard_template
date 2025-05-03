@@ -87,8 +87,9 @@ const DynamicTablePage = () => {
         body: JSON.stringify({
           table_name: values.table_name,
           api_identifier: values.api_identifier,
+          webhook_url: values.webhook_url, 
           fields: processedFields,
-          app_entity: appId, // 假设默认值为1
+          app_entity: appId, 
         }),
       });
       
@@ -132,6 +133,7 @@ const DynamicTablePage = () => {
         body: JSON.stringify({
           table_name: values.table_name,
           api_identifier: values.api_identifier,
+          webhook_url: values.webhook_url, 
           fields: processedFields,
         }),
       });
@@ -179,6 +181,7 @@ const DynamicTablePage = () => {
     form.setFieldsValue({
       table_name: record.table_name,
       api_identifier: record.api_identifier,
+      webhook_url: record.webhook_url,
     });
     
     // 不论record中是否有字段数据，都从服务器获取最新数据
@@ -239,6 +242,11 @@ const DynamicTablePage = () => {
       dataIndex: "api_url",
       key: "api_url",
       render: renderApiUrl,
+    },
+    {
+      title: "webhook地址",
+      dataIndex: "webhook_url",
+      key: "webhook_url"
     },
     {
       title: "创建时间",
@@ -368,6 +376,22 @@ const DynamicTablePage = () => {
             ]}
           >
             <Input placeholder="例如: products, user_profiles" />
+          </Form.Item>
+          <Form.Item
+            name="webhook_url"
+            label={
+              <span>
+                Webhook URL <Tooltip title="当表格数据发生变化时，将触发此 URL 的回调。">
+                  <InfoCircleOutlined style={{ marginLeft: 5 }} />
+                </Tooltip>
+              </span>
+            }
+            rules={[
+              { type: 'url', message: '请输入有效的 URL 地址' },
+              { max: 255, message: 'URL 长度不能超过 255 个字符' },
+            ]}
+          >
+            <Input placeholder="例如: https://example.com/webhook" />
           </Form.Item>
         </Form>
         

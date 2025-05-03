@@ -86,6 +86,7 @@ module Api
         table = DynamicTable.new(
           table_name: params[:table_name],
           api_identifier: params[:api_identifier],
+          webhook_url: params[:webhook_url],
           app_entity_id: app_entity_id
         )
         table.save!
@@ -136,6 +137,9 @@ module Api
 
         if params.key?(:api_identifier)
           table.api_identifier = params[:api_identifier]
+        end
+        if params.key?(:webhook_url)
+          table.webhook_url = params[:webhook_url]
         end
 
         # 保存表的基本信息
