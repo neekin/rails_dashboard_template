@@ -28,6 +28,7 @@ RSpec.describe Api::DynamicRecordsController, type: :controller do
     DynamicTable.destroy_all
   end
   before do
+    allow(controller).to receive(:current_user).and_return(@user)
     # 设置 ActiveStorage
     ActiveStorage::Current.url_options = { host: "localhost", port: "3000" }
 

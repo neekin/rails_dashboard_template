@@ -16,7 +16,7 @@ import {
  
         },
         {
-          path: '/admin/dynamic_tables',
+          path: '/admin/apps',
           name: '管理页',
           icon: <CrownFilled />,
           access: 'canAdmin',

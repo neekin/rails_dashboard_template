@@ -5,9 +5,9 @@ class AddAppEntityToDynamicTables < ActiveRecord::Migration[8.0]
       # 添加app_entity_id列
       add_column :dynamic_tables, :app_entity_id, :integer
 
-      # 确保有默认实体
+      # 确保有默认应用
       unless (default_entity_id = get_default_entity_id)
-        # 创建默认实体并获取ID
+        # 创建默认应用并获取ID
         default_entity_id = create_default_entity
       end
 
@@ -42,7 +42,7 @@ class AddAppEntityToDynamicTables < ActiveRecord::Migration[8.0]
   private
 
   def get_default_entity_id
-    # 查找默认实体ID
+    # 查找默认应用ID
     result = execute("SELECT id FROM app_entities WHERE name = '默认应用' LIMIT 1")
     if result.present? && result.any?
       # 根据不同数据库返回结果类型处理
@@ -57,13 +57,13 @@ class AddAppEntityToDynamicTables < ActiveRecord::Migration[8.0]
   end
 
   def create_default_entity
-    # 插入默认实体
+    # 插入默认应用
     execute(<<-SQL)
       INSERT INTO app_entities (name, description, status, created_at, updated_at)
       VALUES ('默认应用', '系统自动创建的默认应用', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     SQL
 
-    # 获取刚创建的实体ID (适配不同数据库)
+    # 获取刚创建的应用ID (适配不同数据库)
     case ActiveRecord::Base.connection.adapter_name
     when 'SQLite'
       execute("SELECT last_insert_rowid()").first.first

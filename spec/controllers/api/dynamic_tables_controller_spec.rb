@@ -20,6 +20,8 @@ RSpec.describe Api::DynamicTablesController, type: :controller do
   end
 
   before do
+    # 模拟登录用户
+    allow(controller).to receive(:current_user).and_return(@user)
     # 创建一个关联到AppEntity的测试表
     @table = DynamicTable.create(
       table_name: "测试表格",
@@ -40,7 +42,7 @@ RSpec.describe Api::DynamicTablesController, type: :controller do
       DynamicTable.create(table_name: "测试表格2", app_entity_id: @app_entity.id)
       DynamicTable.create(table_name: "测试表格3", app_entity_id: @app_entity.id)
 
-      get :index
+      get :index, params: { appId: @app_entity.id }
       expect(response).to have_http_status(:ok)
       json_response = JSON.parse(response.body)
 
@@ -63,7 +65,7 @@ RSpec.describe Api::DynamicTablesController, type: :controller do
     it "支持搜索查询" do
       DynamicTable.create(table_name: "搜索测试", app_entity_id: @app_entity.id)
 
-      get :index, params: { query: { table_name: "搜索" }.to_json }
+      get :index, params: { query: { table_name: "搜索" }.to_json, appId: @app_entity.id }
 
       expect(response).to have_http_status(:ok)
       json_response = JSON.parse(response.body)
@@ -81,7 +83,7 @@ RSpec.describe Api::DynamicTablesController, type: :controller do
       newer_table = DynamicTable.create(table_name: "A表格", app_entity_id: @app_entity.id)
 
       # 测试按表名升序排序
-      get :index, params: { sortField: "table_name", sortOrder: "ascend" }
+      get :index, params: { sortField: "table_name", sortOrder: "ascend", appId: @app_entity.id }
 
       expect(response).to have_http_status(:ok)
       json_response = JSON.parse(response.body)
@@ -91,7 +93,7 @@ RSpec.describe Api::DynamicTablesController, type: :controller do
       expect(json_response["data"][1]["table_name"]).to eq("B表格")
 
       # 测试按创建时间降序排序（默认行为）
-      get :index
+      get :index, params: { appId: @app_entity.id }
 
       expect(response).to have_http_status(:ok)
       json_response = JSON.parse(response.body)
@@ -111,7 +113,7 @@ RSpec.describe Api::DynamicTablesController, type: :controller do
       end
 
       # 测试第一页，每页5条
-      get :index, params: { current: 1, pageSize: 5 }
+      get :index, params: { current: 1, pageSize: 5, appId: @app_entity.id }
 
       expect(response).to have_http_status(:ok)
       json_response = JSON.parse(response.body)
@@ -122,7 +124,7 @@ RSpec.describe Api::DynamicTablesController, type: :controller do
       expect(json_response["pagination"]["total"]).to eq(12)
 
       # 测试第二页
-      get :index, params: { current: 2, pageSize: 5 }
+      get :index, params: { current: 2, pageSize: 5, appId: @app_entity.id }
 
       expect(response).to have_http_status(:ok)
       json_response = JSON.parse(response.body)
@@ -284,7 +286,7 @@ RSpec.describe Api::DynamicTablesController, type: :controller do
   end
 
     it "表不存在时返回404" do
-      delete :destroy, params: { id: 9999 }
+      delete :destroy, params: { id: 9999, appId: @app_entity.id }
       expect(response).to have_http_status(:not_found)
     end
   end

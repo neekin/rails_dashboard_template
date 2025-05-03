@@ -1,5 +1,5 @@
 module Api
-  class SessionsController < ApiController
+  class SessionsController < AdminController
     before_action :authorize_refresh_by_access_request!, only: [ :refresh ]
 
     def login

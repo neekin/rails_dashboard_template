@@ -28,6 +28,7 @@ RSpec.describe Api::DynamicFieldsController, type: :controller do
     DynamicTable.destroy_all
   end
   before do
+    allow(controller).to receive(:current_user).and_return(@user)
     @table = DynamicTable.create(table_name: "测试表格", app_entity_id: @app_entity.id)
     @field = @table.dynamic_fields.create(name: "name", field_type: "string", required: true)
 

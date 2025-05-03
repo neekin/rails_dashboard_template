@@ -8,6 +8,7 @@ import AdminLayout from "@/components/pro/AdminLayout";
 import DynamicTablePage from "@/pages/DynamicTablePage";
 import DynamicFieldPage from "@/pages/DynamicFieldPage";
 import DynamicDataPage from "@/pages/DynamicDataPage";
+import AppEntityPage from "@/pages/AppEntityPage";
 const router = createBrowserRouter([
   {
     path: "/admin",
@@ -17,9 +18,12 @@ const router = createBrowserRouter([
         path: "",
         element: <AdminLayout />,
         children: [
-          { path: "", element: <HomePage /> },
           {
-            path: "dynamic_tables",
+            path: "apps",
+            element: <AppEntityPage />,
+          },
+          {
+            path: "dynamic_tables/:appId",
             element: <DynamicTablePage />,
           },
           {
@@ -30,6 +34,8 @@ const router = createBrowserRouter([
             path: "dynamic_records/:tableId",
             element: <DynamicDataPage />,
           },
+          { path: "", element: <HomePage /> },
+
         ],
       },
     ],

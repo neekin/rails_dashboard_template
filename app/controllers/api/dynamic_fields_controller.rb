@@ -1,6 +1,6 @@
 module Api
-  class DynamicFieldsController < ApiController
-    # include DynamicTableHelper
+  class DynamicFieldsController < AdminController
+    before_action :validate_user_ownership!, only: [ :index, :create ]
 
     def index
       table = DynamicTable.find(params[:dynamic_table_id])
@@ -10,17 +10,17 @@ module Api
 
     def create
       fields = field_params
-      # 记录操作意图
       if fields.empty?
         Rails.logger.info "收到空字段列表，将删除表中的所有字段"
       end
-      if !fields.is_a?(Array)
+
+      unless fields.is_a?(Array)
         render json: { error: "Invalid fields data" }, status: :unprocessable_entity
         return
       end
+
       updated_or_created_fields = []
       ActiveRecord::Base.transaction do
-        # 获取当前表的所有字段
         dynamic_table = DynamicTable.find(params[:dynamic_table_id])
         existing_fields = dynamic_table.dynamic_fields
 
@@ -44,10 +44,8 @@ module Api
         # 更新或创建字段
         fields.each do |field|
           if field[:id].present?
-            # 如果 ID 不为 null，更新字段
             update_existing_field(field, dynamic_table, updated_or_created_fields)
           else
-            # 如果 ID 为 null，创建新字段
             create_new_field(field, dynamic_table, updated_or_created_fields)
           end
         end
@@ -62,6 +60,30 @@ module Api
     end
 
     private
+
+    # 校验当前用户是否拥有指定的 AppEntity 和 DynamicTable
+    def validate_user_ownership!
+      dynamic_table = DynamicTable.find_by(id: params[:dynamic_table_id])
+      unless dynamic_table
+        render json: { error: "表格不存在" }, status: :not_found
+        return
+      end
+
+      app_entity = dynamic_table.app_entity
+      unless app_entity
+        render json: { error: "应用不存在" }, status: :not_found
+        return
+      end
+
+      unless app_entity.user_id == current_user.id
+        render json: { error: "您无权操作此表格所属的应用" }, status: :forbidden
+        return
+      end
+
+      # 设置实例变量供后续方法使用
+      @dynamic_table = dynamic_table
+      @app_entity = app_entity
+    end
 
     def update_existing_field(field, dynamic_table, updated_or_created_fields)
       existing_field = DynamicField.find(field[:id])

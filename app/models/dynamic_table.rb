@@ -2,7 +2,10 @@ class DynamicTable < ApplicationRecord
   belongs_to :app_entity
   has_many :dynamic_fields, dependent: :destroy
 
-  validates :table_name, presence: true, uniqueness: true, format: { without: /\A\d/, message: "不能以数字开头" }
+  # 修改唯一性验证规则，使表名在同一个 app_entity 下唯一
+  validates :table_name, presence: true,
+                         uniqueness: { scope: :app_entity_id, message: "在同一个应用下表名必须唯一" },
+                         format: { without: /\A\d/, message: "不能以数字开头" }
 
   # 添加API标识符验证
   validates :api_identifier, uniqueness: { allow_blank: true },

@@ -1,8 +1,9 @@
 module Api
-  class DynamicTablesController < ApiController
+  class DynamicTablesController < AdminController
+    before_action :authorize_app_entity!, only: [ :index, :create, :update, :destroy ]
     def index
       # 获取查询参数
-      query_params = params.permit(:current, :pageSize, :query).to_h
+      query_params = params.permit(:current, :pageSize, :query, :appId).to_h
       current_page = query_params["current"].to_i > 0 ? query_params["current"].to_i : 1
       page_size = query_params["pageSize"].to_i > 0 ? query_params["pageSize"].to_i : 10
 
@@ -11,7 +12,10 @@ module Api
 
       # 构建基础查询
       tables = DynamicTable.all
-
+      # 根据 appId 过滤表格
+      if query_params["appId"].present?
+        tables = tables.where(app_entity_id: query_params["appId"])
+      end
       # 动态构建查询条件
       filters.each do |key, value|
         tables = tables.where("#{key} LIKE ?", "%#{value}%")
@@ -58,12 +62,21 @@ module Api
       end
       # 检查 app_entity 参数是否存在且有效
       app_entity_id = params[:app_entity]
-      if app_entity_id.blank? || !AppEntity.exists?(app_entity_id)
+      app_entity = AppEntity.find_by(id: app_entity_id)
+
+      if app_entity.nil?
         render json: { error: "非法应用或应用不存在" }, status: :unprocessable_entity
         return
       end
+
+      # 验证当前用户是否有权限操作该 AppEntity
+      unless app_entity.user_id == current_user.id
+        render json: { error: "您无权操作此应用" }, status: :forbidden
+        return
+      end
+
       # 检查表名在当前 AppEntity 下是否已存在
-      if AppEntity.find(app_entity_id).dynamic_tables.exists?(table_name:  params[:table_name])
+      if app_entity.dynamic_tables.exists?(table_name: params[:table_name])
         render json: { error: "表格名称在此应用下已存在" }, status: :unprocessable_entity
         return
       end
@@ -242,6 +255,27 @@ module Api
         Rails.logger.error "删除表格失败: #{e.message}\n#{e.backtrace.join("\n")}"
         render json: { error: e.message }, status: :internal_server_error
       end
+    end
+    private
+
+    def authorize_app_entity!
+      app_entity_id = params[:app_entity] || params[:appId] || DynamicTable.find_by(id: params[:id])&.app_entity_id
+
+      # 检查 app_entity 是否存在
+      app_entity = AppEntity.find_by(id: app_entity_id)
+      unless app_entity
+        render json: { error: "非法应用或应用不存在" }, status: :unprocessable_entity
+        return
+      end
+
+      # 检查当前用户是否有权限操作该 AppEntity
+      unless app_entity.user_id == current_user.id
+        render json: { error: "您无权操作此应用" }, status: :forbidden
+        return
+      end
+
+      # 设置实例变量供后续方法使用
+      @app_entity = app_entity
     end
   end
 end

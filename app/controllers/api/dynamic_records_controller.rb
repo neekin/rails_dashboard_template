@@ -1,5 +1,6 @@
 module Api
-  class DynamicRecordsController < ApiController
+  class DynamicRecordsController < AdminController
+    before_action :validate_user_ownership!, only: [ :index, :create, :update, :destroy ]
     def serve_file
       table = DynamicTable.find(params[:dynamic_table_id])
       record_id = params[:id]
@@ -171,10 +172,10 @@ module Api
     end
 
     def index
-      table = DynamicTable.find(params[:dynamic_table_id])
+      # table = DynamicTable.find(params[:dynamic_table_id])
 
       # 获取字段定义
-      fields = table.dynamic_fields.select(:name, :field_type, :required).map do |field|
+      fields = @dynamic_table.dynamic_fields.select(:name, :field_type, :required).map do |field|
         {
           name: field.name,
           field_type: field.field_type,
@@ -189,7 +190,7 @@ module Api
 
       # 解析过滤条件
       filters = JSON.parse(query_params["query"] || "{}").except("current", "pageSize")
-      table_name = "dyn_#{table.id}"
+      table_name = "dyn_#{@dynamic_table.id}"
 
       # 构建查询
       query = "SELECT * FROM #{table_name}"
@@ -204,7 +205,7 @@ module Api
       data = ActiveRecord::Base.connection.select_all(query).to_a
 
       # 获取文件字段列表
-      file_fields = table.dynamic_fields.where(field_type: "file").pluck(:name)
+      file_fields = @dynamic_table.dynamic_fields.where(field_type: "file").pluck(:name)
 
       # 处理文件字段，替换 signed_id 为文件 URL
       if file_fields.any?
@@ -214,7 +215,7 @@ module Api
             if signed_id.present?
               begin
                 record[field] = dynamic_record_file_url(
-                  table_id: table.id,
+                  table_id: @dynamic_table.id,
                   id: record["id"],
                   field_name: field,
                   host: request.host_with_port,
@@ -337,6 +338,31 @@ module Api
     end
 
     private
+
+    # 校验当前用户是否拥有指定的 AppEntity 和 DynamicTable
+    def validate_user_ownership!
+      dynamic_table = DynamicTable.find_by(id: params[:dynamic_table_id])
+      unless dynamic_table
+        render json: { error: "表格不存在" }, status: :not_found
+        return
+      end
+
+      app_entity = dynamic_table.app_entity
+      unless app_entity
+        render json: { error: "应用不存在" }, status: :not_found
+        return
+      end
+
+      unless app_entity.user_id == current_user.id
+        render json: { error: "您无权操作此表格所属的应用" }, status: :forbidden
+        return
+      end
+
+      # 设置实例变量供后续方法使用
+      @dynamic_table = dynamic_table
+      @app_entity = app_entity
+    end
+
     def dynamic_record_file_url(options = {})
       table_id = options[:table_id]
       id = options[:id]

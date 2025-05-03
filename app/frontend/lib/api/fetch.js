@@ -77,6 +77,9 @@ async function apiFetch(path, options = {}) {
       window.location.href = '/login?expired=1';
     }
     const errorData = await response.json().catch(() => ({}));
+    if (response.status === 403) {
+      throw new Error(errorData.error||'没有权限访问该资源');
+    }
     throw new Error(errorData.message || 'API请求失败');
   }
 

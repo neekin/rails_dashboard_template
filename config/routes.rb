@@ -4,6 +4,11 @@ Rails.application.routes.draw do
     post "refresh", to: "sessions#refresh"
     delete "logout", to: "sessions#logout"
     get "profile", to: "profiles#show"
+    resources :app_entities do
+      member do
+        post :reset_token # 添加重置密钥的路由
+      end
+    end
     resources :dynamic_tables do
       resources :dynamic_fields, only: [ :index, :create ]
       resources :dynamic_records, only: [ :index, :create, :update, :destroy ] do
@@ -14,6 +19,8 @@ Rails.application.routes.draw do
       end
     end
     namespace :v1 do
+      get "/:appId/:identifier/:id/files/:field_name", to: "dynamic_api#serve_file", as: :serve_file_with_app
+      get "/:appId/:identifier/:id/files/:field_name/*filename", to: "dynamic_api#serve_file"
       get "blobs/:signed_id", to: "blobs#show", as: :blob
       # 记录CRUD路由
       get "/:identifier", to: "dynamic_api#index"
@@ -22,12 +29,12 @@ Rails.application.routes.draw do
       put "/:identifier/:id", to: "dynamic_api#update"
       patch "/:identifier/:id", to: "dynamic_api#update"
       delete "/:identifier/:id", to: "dynamic_api#destroy"
-      resources :identifier, controller: "dynamic_api", path: ":identifier", only: [ :index, :show, :create, :update, :destroy ] do
-          member do
-                    get "files/:field_name", to: "dynamic_api#serve_file"
-                    get "files/:field_name/*filename", to: "dynamic_api#serve_file"
-          end
-      end
+      # resources :identifier, controller: "dynamic_api", path: ":identifier", only: [ :index, :show, :create, :update, :destroy ] do
+      #     member do
+      #               get "files/:field_name", to: "dynamic_api#serve_file"
+      #               get "files/:field_name/*filename", to: "dynamic_api#serve_file"
+      #     end
+      # end
     end
   end
   root "pages#home"

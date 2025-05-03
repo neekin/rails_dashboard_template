@@ -10,8 +10,9 @@ import {
 } from "@ant-design/pro-components";
 import FieldEditor from "@/components/FieldEditor";
 import { apiFetch } from "@/lib/api/fetch";
-
+import { useParams } from "react-router";
 const DynamicTablePage = () => {
+  const { appId } = useParams(); 
   const [form] = Form.useForm();
   const [fields, setFields] = useState([]); // 字段数据
   const [modalVisible, setModalVisible] = useState(false);
@@ -30,7 +31,10 @@ const DynamicTablePage = () => {
   const fetchTables = async (params = {}) => {
     setLoading(true);
     try {
-      const response = await apiFetch(`/api/dynamic_tables?query=${JSON.stringify(params)}`);
+      const queryParams = {
+        ...params// 从 useParams 获取的 appId
+      };
+      const response = await apiFetch(`/api/dynamic_tables?query=${JSON.stringify(queryParams)}&appId=${appId}`);
 
       // 更新状态
       setTableData(response.data || []);
@@ -84,6 +88,7 @@ const DynamicTablePage = () => {
           table_name: values.table_name,
           api_identifier: values.api_identifier,
           fields: processedFields,
+          app_entity: appId, // 假设默认值为1
         }),
       });
       
