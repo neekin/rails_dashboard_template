@@ -2,15 +2,43 @@
 require 'rails_helper'
 
 RSpec.describe Api::DynamicTablesController, type: :controller do
+  before(:all) do
+    # 创建一个默认用户
+    @user = User.create!(
+      username: 'test_user',
+      password: 'password123',
+      password_confirmation: 'password123'
+    )
+
+    # 创建测试用的AppEntity
+    @app_entity = AppEntity.create!(
+      name: '测试应用',
+      description: '用于测试的应用',
+      status: :active,
+      user_id: @user.id
+    )
+  end
+
   before do
-    @table = DynamicTable.create(table_name: "测试表格")
+    # 创建一个关联到AppEntity的测试表
+    @table = DynamicTable.create(
+      table_name: "测试表格",
+      app_entity_id: @app_entity.id
+    )
+  end
+
+  after(:all) do
+    # 清理测试数据
+    User.destroy_all
+    AppEntity.destroy_all
+    DynamicTable.destroy_all
   end
 
   describe "GET #index" do
     it "返回带分页的动态表列表" do
       # 再创建几个表以测试分页
-      DynamicTable.create(table_name: "测试表格2")
-      DynamicTable.create(table_name: "测试表格3")
+      DynamicTable.create(table_name: "测试表格2", app_entity_id: @app_entity.id)
+      DynamicTable.create(table_name: "测试表格3", app_entity_id: @app_entity.id)
 
       get :index
       expect(response).to have_http_status(:ok)
@@ -33,7 +61,7 @@ RSpec.describe Api::DynamicTablesController, type: :controller do
     end
 
     it "支持搜索查询" do
-      DynamicTable.create(table_name: "搜索测试")
+      DynamicTable.create(table_name: "搜索测试", app_entity_id: @app_entity.id)
 
       get :index, params: { query: { table_name: "搜索" }.to_json }
 
@@ -49,8 +77,8 @@ RSpec.describe Api::DynamicTablesController, type: :controller do
       # 清除现有数据以便精确测试排序
       DynamicTable.delete_all
 
-      older_table = DynamicTable.create(table_name: "B表格")
-      newer_table = DynamicTable.create(table_name: "A表格")
+      older_table = DynamicTable.create(table_name: "B表格", app_entity_id: @app_entity.id)
+      newer_table = DynamicTable.create(table_name: "A表格", app_entity_id: @app_entity.id)
 
       # 测试按表名升序排序
       get :index, params: { sortField: "table_name", sortOrder: "ascend" }
@@ -79,7 +107,7 @@ RSpec.describe Api::DynamicTablesController, type: :controller do
 
       # 创建12个表
       12.times do |i|
-        DynamicTable.create(table_name: "分页测试表#{i+1}")
+        DynamicTable.create(table_name: "分页测试表#{i+1}", app_entity_id: @app_entity.id)
       end
 
       # 测试第一页，每页5条
@@ -110,8 +138,7 @@ RSpec.describe Api::DynamicTablesController, type: :controller do
         { name: "name", field_type: "string", required: true },
         { name: "age", field_type: "integer", required: false }
       ]
-
-      post :create, params: { table_name: "新表格", fields: fields_attributes }
+      post :create, params: { table_name: "新表格", fields: fields_attributes, app_entity: @app_entity.id }
 
       expect(response).to have_http_status(:created)
       json_response = JSON.parse(response.body)
@@ -121,30 +148,30 @@ RSpec.describe Api::DynamicTablesController, type: :controller do
       table_name = "dyn_#{json_response['id']}"
       expect(ActiveRecord::Base.connection.table_exists?(table_name)).to be true
 
-      # 验证字段是否创建
+      # # 验证字段是否创建
       table = DynamicTable.find(json_response["id"])
       expect(table.dynamic_fields.count).to eq(2)
       expect(table.dynamic_fields.pluck(:name)).to include("name", "age")
     end
 
     it "表名为空时创建失败" do
-      post :create, params: { table_name: "", fields: [] }
+      post :create, params: { table_name: "", fields: [], app_entity: @app_entity.id }
       expect(response).to have_http_status(:unprocessable_entity)
       expect(JSON.parse(response.body)["error"]).to include("不能为空")
     end
 
     it "表名以数字开头时创建失败" do
-      post :create, params: { table_name: "1test", fields: [] }
+      post :create, params: { table_name: "1test", fields: [], app_entity: @app_entity.id }
       expect(response).to have_http_status(:unprocessable_entity)
       expect(JSON.parse(response.body)["error"]).to include("不能以数字开头")
     end
 
     it "表名已存在时创建失败" do
       # 先创建一个表
-      DynamicTable.create!(table_name: "test_table")
+      DynamicTable.create!(table_name: "test_table", app_entity_id: @app_entity.id)
 
       # 尝试创建同名表
-      post :create, params: { table_name: "test_table", fields: [] }
+      post :create, params: { table_name: "test_table", fields: [], app_entity: @app_entity.id }
       expect(response).to have_http_status(:unprocessable_entity)
       expect(JSON.parse(response.body)["error"]).to include("已存在")
     end
@@ -168,7 +195,7 @@ RSpec.describe Api::DynamicTablesController, type: :controller do
 
   it "成功更新动态表字段" do
     # 准备数据
-    table = DynamicTable.create!(table_name: "test_table")
+    table = DynamicTable.create!(table_name: "test_table", app_entity_id: @app_entity.id)
     field = table.dynamic_fields.create!(name: "name", field_type: "string", required: true)
 
     # 确保物理表存在并正确设置
@@ -223,7 +250,7 @@ RSpec.describe Api::DynamicTablesController, type: :controller do
   describe "DELETE #destroy" do
   it "成功删除动态表" do
     # 创建测试表格
-    table = DynamicTable.create!(table_name: "待删除表格")
+    table = DynamicTable.create!(table_name: "待删除表格", app_entity_id: @app_entity.id)
     field = table.dynamic_fields.create!(name: "test_field", field_type: "string", required: true)
 
     # 先检查并删除已存在的物理表

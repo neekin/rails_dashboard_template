@@ -4,7 +4,29 @@ require 'rails_helper'
 RSpec.describe Api::DynamicRecordsController, type: :controller do
   include DynamicTableHelper
   include ActionDispatch::TestProcess
+  before(:all) do
+    # 创建一个默认用户
+    @user = User.create!(
+      username: 'test_user',
+      password: 'password123',
+      password_confirmation: 'password123'
+    )
 
+    # 创建测试用的AppEntity
+    @app_entity = AppEntity.create!(
+      name: '测试应用',
+      description: '用于测试的应用',
+      status: :active,
+      user_id: @user.id
+    )
+  end
+
+  after(:all) do
+    # 清理测试数据
+    User.destroy_all
+    AppEntity.destroy_all
+    DynamicTable.destroy_all
+  end
   before do
     # 设置 ActiveStorage
     ActiveStorage::Current.url_options = { host: "localhost", port: "3000" }
@@ -12,7 +34,7 @@ RSpec.describe Api::DynamicRecordsController, type: :controller do
     # 确保创建了测试图片文件
     create_test_image
 
-    @table = DynamicTable.create(table_name: "测试表格")
+    @table = DynamicTable.create(table_name: "测试表格", app_entity_id: @app_entity.id)
     @name_field = @table.dynamic_fields.create(name: "name", field_type: "string", required: true)
     @age_field = @table.dynamic_fields.create(name: "age", field_type: "integer", required: false)
     # 添加文件字段

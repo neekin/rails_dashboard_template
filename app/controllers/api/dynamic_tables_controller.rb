@@ -56,10 +56,15 @@ module Api
         render json: { error: "表格名称不能以数字开头" }, status: :unprocessable_entity
         return
       end
-
-      # 检查表名是否已存在
-      if DynamicTable.exists?(table_name: params[:table_name])
-        render json: { error: "表格名称已存在" }, status: :unprocessable_entity
+      # 检查 app_entity 参数是否存在且有效
+      app_entity_id = params[:app_entity]
+      if app_entity_id.blank? || !AppEntity.exists?(app_entity_id)
+        render json: { error: "非法应用或应用不存在" }, status: :unprocessable_entity
+        return
+      end
+      # 检查表名在当前 AppEntity 下是否已存在
+      if AppEntity.find(app_entity_id).dynamic_tables.exists?(table_name:  params[:table_name])
+        render json: { error: "表格名称在此应用下已存在" }, status: :unprocessable_entity
         return
       end
 
@@ -67,7 +72,8 @@ module Api
         # 创建表格
         table = DynamicTable.new(
           table_name: params[:table_name],
-          api_identifier: params[:api_identifier]
+          api_identifier: params[:api_identifier],
+          app_entity_id: app_entity_id
         )
         table.save!
 
