@@ -1,4 +1,5 @@
 class DynamicTable < ApplicationRecord
+  belongs_to :app_entity
   has_many :dynamic_fields, dependent: :destroy
 
   validates :table_name, presence: true, uniqueness: true, format: { without: /\A\d/, message: "不能以数字开头" }
