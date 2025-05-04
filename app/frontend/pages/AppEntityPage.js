@@ -48,7 +48,6 @@ const AppEntityPage = () => {
 
   // 创建或更新 AppEntity
   const handleSubmit = async () => {
-    console.log("handleSubmit");
     try {
       await form.validateFields();
       const values = form.getFieldsValue();
@@ -78,9 +77,7 @@ const AppEntityPage = () => {
       setEditingEntity(null);
       fetchEntities();
     } catch (err) {
-      if (err.errorFields) return; // 表单验证错误
-      message.error("操作失败: " + (err.message || "未知错误"));
-      console.error(err);
+      message.error(err.message || "操作失败");
     }
   };
 
@@ -89,16 +86,14 @@ const AppEntityPage = () => {
       await apiFetch(`/api/app_entities/${id}`, {
         method: "DELETE",
       });
-
+  
       message.success("删除应用成功");
-      // 重新加载表格数据
       fetchEntities({
         current: pagination.current,
         pageSize: pagination.pageSize,
       });
     } catch (err) {
-      message.error("删除失败: " + (err.message || "未知错误"));
-      console.error("删除表格失败:", err);
+      message.error(err.message || "删除失败");
     }
   };
 
@@ -201,20 +196,20 @@ const AppEntityPage = () => {
             method: "POST",
           });
           message.success("密钥已重置");
-  
+
           // 更新临时密钥状态
           setTemporaryTokens((prevTokens) => ({
             ...prevTokens,
             [id]: response.token,
           }));
-  
+
           // 更新表格数据
           setTableData((prevData) =>
             prevData.map((entity) =>
               entity.id === id ? { ...entity, token: response.token } : entity
             )
           );
-  
+
           Modal.info({
             title: "新密钥已生成",
             content: (
@@ -235,13 +230,11 @@ const AppEntityPage = () => {
             ),
           });
         } catch (err) {
-          message.error("重置密钥失败: " + (err.message || "未知错误"));
-          console.error(err);
+          message.error(err.message || "重置密钥失败");
         }
       },
     });
   };
-
   return (
     <div>
       <ProTable

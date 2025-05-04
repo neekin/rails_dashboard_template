@@ -76,6 +76,17 @@ module Api
         DynamicTableService.change_field_type(dynamic_table, field[:name], field[:field_type], existing_field.field_type)
       end
 
+      # 如果唯一性约束发生变化，更新物理表的唯一性约束
+      if existing_field.unique != field[:unique]
+        Rails.logger.info "更新字段唯一性约束: #{field[:name]} 为 #{field[:unique]}"
+        result = DynamicTableService.change_field_unique_constraint(dynamic_table, field[:name], field[:unique])
+        unless result[:success]
+          Rails.logger.warn "唯一索引修改失败，恢复为原值: #{existing_field.unique}"
+          raise StandardError, result[:error] # 使用标准错误抛出错误信息
+        end
+      end
+
+      # 更新字段
       existing_field.update!(field)
       updated_or_created_fields << existing_field
     end
@@ -92,7 +103,7 @@ module Api
       return [] if params[:fields].blank?
 
       params.require(:fields).map do |field|
-        field.permit(:id, :name, :field_type, :required).merge(
+        field.permit(:id, :name, :field_type, :required, :unique).merge(
           dynamic_table_id: params[:dynamic_table_id]
         ).to_h
       end

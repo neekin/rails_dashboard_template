@@ -42,9 +42,9 @@ class DynamicTableService
         # 构建添加列的SQL
         sql_type = sql_column_type(field.field_type)
         null_constraint = field.required ? "NOT NULL" : ""
-
+        unique_constraint = field.unique ? "UNIQUE" : "" # 如果字段是唯一的，添加 UNIQUE 约束
         Rails.logger.info "添加字段: #{safe_field_name} (#{sql_type}) 到表 #{table_name}"
-        add_column_sql = "ALTER TABLE #{table_name} ADD COLUMN #{safe_field_name} #{sql_type} #{null_constraint}"
+        add_column_sql = "ALTER TABLE #{table_name} ADD COLUMN #{safe_field_name} #{sql_type} #{null_constraint} #{unique_constraint}"
         ActiveRecord::Base.connection.execute(add_column_sql)
 
         # 如果是必填字段，为现有数据设置默认值
@@ -61,12 +61,66 @@ class DynamicTableService
       end
     end
 
+    def change_field_unique_constraint(table, field_name, unique)
+      table_name = physical_table_name(table)
+      temp_table_name = "#{table_name}_temp"
+
+      begin
+        # 如果临时表已存在，先删除
+        if ActiveRecord::Base.connection.table_exists?(temp_table_name)
+          Rails.logger.warn "临时表 #{temp_table_name} 已存在，删除临时表"
+          ActiveRecord::Base.connection.execute("DROP TABLE #{temp_table_name}")
+        end
+
+        # 获取原表的所有列信息
+        columns = ActiveRecord::Base.connection.columns(table_name).map(&:name)
+        columns_definition = columns.map do |column|
+          if column == field_name && unique
+            "#{column} UNIQUE" # 为目标字段添加唯一约束
+          else
+            column
+          end
+        end.join(", ")
+
+        # 创建临时表
+        create_temp_table_sql = "CREATE TABLE #{temp_table_name} (#{columns_definition})"
+        ActiveRecord::Base.connection.execute(create_temp_table_sql)
+
+        # 将数据从原表复制到临时表
+        copy_data_sql = "INSERT INTO #{temp_table_name} SELECT * FROM #{table_name}"
+        ActiveRecord::Base.connection.execute(copy_data_sql)
+
+        # 删除原表
+        ActiveRecord::Base.connection.execute("DROP TABLE #{table_name}")
+
+        # 将临时表重命名为原表
+        ActiveRecord::Base.connection.execute("ALTER TABLE #{temp_table_name} RENAME TO #{table_name}")
+
+        Rails.logger.info "成功更改字段 #{field_name} 的唯一约束为 #{unique}"
+        { success: true }
+      rescue ActiveRecord::RecordNotUnique => e
+        Rails.logger.error "更改字段唯一约束失败（唯一性冲突）: #{e.message}"
+        { success: false, error: "已有数据违反唯一约束，请清理冲突数据后重试。" }
+      rescue => e
+        Rails.logger.error "更改字段唯一约束失败: #{e.message}\n#{e.backtrace.join("\n")}"
+        { success: false, error: "更改字段唯一约束时发生未知错误，请联系管理员。" }
+      end
+    end
+
     # 从物理表删除字段
     def remove_field_from_physical_table(table, field)
       table_name = physical_table_name(table)
       safe_field_name = sanitize_column_name(field.name)
+      constraint_name = "unique_#{safe_field_name}"
 
       begin
+        # 删除唯一约束（如果存在）
+        if field.unique
+          Rails.logger.info "删除字段的唯一约束: #{constraint_name} 从表 #{table_name}"
+          ActiveRecord::Base.connection.execute("ALTER TABLE #{table_name} DROP CONSTRAINT #{constraint_name}")
+        end
+
+        # 删除字段
         if column_exists?(table_name, safe_field_name)
           Rails.logger.info "删除字段: #{safe_field_name} 从表 #{table_name}"
           ActiveRecord::Base.connection.execute("ALTER TABLE #{table_name} DROP COLUMN #{safe_field_name}")

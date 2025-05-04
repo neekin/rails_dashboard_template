@@ -30,21 +30,23 @@ const DynamicFieldPage = () => {
 
   const handleSaveFields = async () => {
     try {
-    const processedFields = fields.map((field) => {
+      const processedFields = fields.map((field) => {
         const { isNew, ...rest } = field; // 移除 isNew 字段
         if (isNew) {
           rest.id = null; // 新字段的 ID 设置为 null
         }
         return rest;
-        });
-      await apiFetch(`/api/dynamic_tables/${tableId}/dynamic_fields`, {
-        headers:{"Content-Type": "application/json"},
-        method: 'POST',
-        body: JSON.stringify({dynamic_table_id:tableId, fields:processedFields }),
       });
-      message.success('字段更新成功');
+  
+      await apiFetch(`/api/dynamic_tables/${tableId}/dynamic_fields`, {
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+        body: JSON.stringify({ dynamic_table_id: tableId, fields: processedFields }),
+      });
+  
+      message.success("字段更新成功");
     } catch (err) {
-      message.error('字段更新失败');
+      message.error(err.message || "字段更新失败");
     }
   };
 

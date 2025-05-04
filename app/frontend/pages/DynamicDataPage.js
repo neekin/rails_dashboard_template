@@ -190,7 +190,7 @@ const DynamicDataPage = () => {
       }
     } catch (err) {
       console.error("保存数据错误:", err);
-      message.error(editingRecord ? "数据更新失败" : "数据保存失败");
+      message.error(editingRecord ? `数据更新失败:${err}` : "数据保存失败");
     }
     finally{
       setLoading(false);

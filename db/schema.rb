@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_05_03_210552) do
+ActiveRecord::Schema[8.0].define(version: 2025_05_04_092849) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -56,7 +56,6 @@ ActiveRecord::Schema[8.0].define(version: 2025_05_03_210552) do
     t.integer "age"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.text "avatar"
   end
 
   create_table "dyn_2", force: :cascade do |t|
@@ -73,6 +72,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_05_03_210552) do
     t.boolean "required"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.boolean "unique", default: false, null: false
     t.index ["dynamic_table_id"], name: "index_dynamic_fields_on_dynamic_table_id"
   end
 

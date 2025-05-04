@@ -33,6 +33,13 @@ const FieldEditor = ({ fields, setFields, editableKeys, setEditableRowKeys }) =>
       },
     },
     {
+      title: '唯一索引',
+      dataIndex: 'unique',
+      valueType: 'switch',
+      render: (text, record) => (record.unique ? '是' : '否'),
+      editable: true,
+    },
+    {
       title: '是否必填',
       dataIndex: 'required',
       valueType: 'switch',

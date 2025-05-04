@@ -41,7 +41,7 @@ async function apiFetch(path, options = {}) {
   let token = localStorage.getItem('access-token');
 
   if (needsAuth) {
-    if (!token) throw new Error('No access token');
+    if (!token) throw new Error('未登录，请先登录');
 
     const exp = getTokenExp(token);
     const now = Date.now();
@@ -52,13 +52,12 @@ async function apiFetch(path, options = {}) {
         await refreshAccessToken();
         token = localStorage.getItem('access-token'); // 刷新后拿新token
       } catch (err) {
-        throw err;
+        throw new Error('登录已过期，请重新登录');
       }
     }
   }
 
   const headers = {
-    // 'Content-Type': 'application/json',
     ...(options.headers || {}),
   };
 
@@ -66,31 +65,42 @@ async function apiFetch(path, options = {}) {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${path}`, {
-    ...options,
-    headers,
-  });
+  try {
+    const response = await fetch(`${path}`, {
+      ...options,
+      headers,
+    });
 
-  if (!response.ok) {
-    if (response.status === 401 && needsAuth) {
-      localStorage.clear();
-      window.location.href = '/login?expired=1';
-    }
-    const errorData = await response.json().catch(() => ({}));
-    if (response.status === 403) {
-      throw new Error(errorData.error||'没有权限访问该资源');
-    }
-    throw new Error(errorData.message || 'API请求失败');
-  }
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({})); // 捕获 JSON 解析错误
 
-  if (response.headers.get("Content-Type")?.includes("application/json")) {
-    // console.log(typeof response.json())
-    return response.json();
-  } else {
-    return response; // 如果不是 JSON 响应，返回 null 或其他默认值
+      // 根据状态码返回统一的错误信息
+      const errorMessage = {
+        400: errorData.error || '请求无效，请检查输入内容',
+        401: errorData.error || '未授权访问，请登录后重试',
+        403: errorData.error || '您没有权限访问该资源',
+        404: errorData.error || '请求的资源不存在',
+        422: errorData.error || '请求无法处理，请检查输入内容',
+        500: errorData.error || '服务器内部错误，请稍后重试',
+      }[response.status] || errorData.message || '发生未知错误，请稍后重试';
+
+      throw new Error(errorMessage);
+    }
+
+    if (response.status === 204 || !response.headers.get("Content-Type")) {
+      return {}; // 处理空响应
+    }
+
+    if (response.headers.get("Content-Type")?.includes("application/json")) {
+      return response.json();
+    } else {
+      return response; // 如果不是 JSON 响应，返回原始响应
+    }
+  } catch (err) {
+    console.error(`请求失败: ${path}`, err);
+    throw err; // 抛出错误以便调用方处理
   }
 }
-
 function startBackgroundRefresh() {
   stopBackgroundRefresh();
 

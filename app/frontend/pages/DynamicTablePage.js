@@ -68,11 +68,9 @@ const DynamicTablePage = () => {
 
   const handleCreateTable = async () => {
     try {
-      // 使用Form进行验证
       await form.validateFields();
       const values = form.getFieldsValue();
-      
-      // 处理字段数据，确保每个字段的格式正确
+  
       const processedFields = fields.map((field) => ({
         ...field,
         id: null, // 确保新字段的ID为null
@@ -80,31 +78,26 @@ const DynamicTablePage = () => {
         field_type: field.field_type,
         required: !!field.required, // 确保布尔值
       }));
-
+  
       await apiFetch("/api/dynamic_tables", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           table_name: values.table_name,
           api_identifier: values.api_identifier,
-          webhook_url: values.webhook_url, 
+          webhook_url: values.webhook_url,
           fields: processedFields,
-          app_entity: appId, 
+          app_entity: appId,
         }),
       });
-      
+  
       message.success("表格创建成功");
       setModalVisible(false);
       setFields([]); // 清空字段数据
       form.resetFields(); // 重置表单
       fetchTables(); // 刷新表格列表
     } catch (err) {
-      if (err.errorFields) {
-        // 表单验证错误
-        return;
-      }
-      message.error("创建失败: " + (err.message || "未知错误"));
-      console.error("创建表格失败:", err);
+      message.error(err.message || "创建失败");
     }
   };
 

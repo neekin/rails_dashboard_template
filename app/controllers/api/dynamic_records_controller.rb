@@ -160,17 +160,13 @@ module Api
       begin
         result = ActiveRecord::Base.connection.execute(sql)
         if result
-          # 获取最新插入记录的ID
-          # last_id_sql = "SELECT last_insert_rowid() as id"
-          # last_id = ActiveRecord::Base.connection.select_one(last_id_sql)["id"]
-
-          # 返回新创建的记录
-          # query = "SELECT * FROM dyn_#{@dynamic_table.id} WHERE id = #{last_id}"
-          # new_record = ActiveRecord::Base.connection.select_one(query)
           head :ok
         else
           render json: { error: "Failed to create record" }, status: :unprocessable_entity
         end
+      rescue ActiveRecord::RecordNotUnique => e
+        Rails.logger.error "Unique constraint violation: #{e.message}"
+        render json: { error: "记录创建失败，违反唯一约束，请检查输入数据。" }, status: :unprocessable_entity
       rescue => e
         Rails.logger.error "SQL Execution Error: #{e.message}"
         render json: { error: e.message }, status: :internal_server_error
@@ -328,6 +324,9 @@ module Api
         else
           render json: { error: "Failed to update record" }, status: :unprocessable_entity
         end
+      rescue ActiveRecord::RecordNotUnique => e
+        Rails.logger.error "Unique constraint violation: #{e.message}"
+        render json: { error: "记录创建失败，违反唯一约束，请检查输入数据。" }, status: :unprocessable_entity
       rescue => e
         Rails.logger.error "SQL Execution Error: #{e.message}"
         render json: { error: e.message }, status: :internal_server_error
