@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.0].define(version: 2025_05_04_092849) do
+ActiveRecord::Schema[8.0].define(version: 2025_05_04_111514) do
   create_table "active_storage_attachments", force: :cascade do |t|
     t.string "name", null: false
     t.string "record_type", null: false
@@ -39,6 +39,19 @@ ActiveRecord::Schema[8.0].define(version: 2025_05_04_092849) do
     t.index ["blob_id", "variation_digest"], name: "index_active_storage_variant_records_uniqueness", unique: true
   end
 
+  create_table "api_keys", force: :cascade do |t|
+    t.string "apikey"
+    t.string "apisecret"
+    t.integer "app_entity_id", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.boolean "active"
+    t.string "remark"
+    t.index ["active"], name: "index_api_keys_on_active"
+    t.index ["apikey"], name: "index_api_keys_on_apikey", unique: true
+    t.index ["app_entity_id"], name: "index_api_keys_on_app_entity_id"
+  end
+
   create_table "app_entities", force: :cascade do |t|
     t.string "name"
     t.text "description"
@@ -46,17 +59,12 @@ ActiveRecord::Schema[8.0].define(version: 2025_05_04_092849) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.integer "user_id", null: false
-    t.string "token"
-    t.index ["token"], name: "index_app_entities_on_token", unique: true
     t.index ["user_id"], name: "index_app_entities_on_user_id"
   end
 
-  create_table "dyn_1", force: :cascade do |t|
-    t.string "name"
-    t.integer "age"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-  end
+# Could not dump table "dyn_1" because of following StandardError
+#   Unknown type '' for column 'id'
+
 
   create_table "dyn_2", force: :cascade do |t|
     t.string "name"
@@ -99,6 +107,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_05_04_092849) do
 
   add_foreign_key "active_storage_attachments", "active_storage_blobs", column: "blob_id"
   add_foreign_key "active_storage_variant_records", "active_storage_blobs", column: "blob_id"
+  add_foreign_key "api_keys", "app_entities"
   add_foreign_key "app_entities", "users"
   add_foreign_key "dynamic_fields", "dynamic_tables"
   add_foreign_key "dynamic_tables", "app_entities"

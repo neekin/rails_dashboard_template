@@ -1,7 +1,7 @@
 module Api
   class AppEntitiesController < AdminController
-    before_action :set_app_entity, only: [ :show, :update, :destroy, :reset_token ]
-    before_action :authorize_user!, only: [ :update, :destroy, :reset_token ]
+    before_action :set_app_entity, only: [ :show, :update, :destroy, :manage_api_keys ]
+    before_action :authorize_user!, only: [ :update, :destroy, :manage_api_keys ]
     before_action :authorize_access_request!
 
     # GET /api/app_entities
@@ -41,7 +41,7 @@ module Api
 
       # 返回分页数据
       render json: {
-        data: entities.as_json(except: [ :token ]),
+        data: entities.as_json,
         pagination: {
           current: current_page,
           pageSize: page_size,
@@ -53,7 +53,7 @@ module Api
 
     # GET /api/app_entities/:id
     def show
-      render json: @app_entity.as_json(except: [ :token ])
+      render json: @app_entity
     end
 
     # POST /api/app_entities
@@ -61,7 +61,15 @@ module Api
       @app_entity = AppEntity.new(app_entity_params.merge(user_id: current_user.id))
 
       if @app_entity.save
-        render json: @app_entity, status: :created
+        # 同时创建一个默认的API密钥
+        @api_key = @app_entity.api_keys.create!
+        render json: {
+          app_entity: @app_entity,
+          api_key: {
+            apikey: @api_key.apikey,
+            apisecret: @api_key.apisecret
+          }
+        }, status: :created
       else
         render json: @app_entity.errors, status: :unprocessable_entity
       end
@@ -70,7 +78,7 @@ module Api
     # PATCH/PUT /api/app_entities/:id
     def update
       if @app_entity.update(app_entity_params)
-        render json: @app_entity.as_json(except: [ :token ])
+        render json: @app_entity
       else
         render json: @app_entity.errors, status: :unprocessable_entity
       end
@@ -108,14 +116,52 @@ module Api
       render json: { error: e.message }, status: :internal_server_error
     end
 
-    # 重置密钥
-    def reset_token
-      @app_entity.regenerate_token # 使用 has_secure_token 提供的 regenerate_token 方法
-      render json: { token: @app_entity.token }, status: :ok
+    # 管理API密钥
+    def manage_api_keys
+      case params[:action_type]
+      when "create"
+        # 创建新的API密钥
+        api_key = @app_entity.api_keys.create!
+        render json: {
+          apikey: api_key.apikey,
+          apisecret: api_key.apisecret
+        }, status: :created
+      when "list"
+        # 列出所有API密钥
+        keys = @app_entity.api_keys
+        render json: keys
+      when "toggle_status"
+        # 切换API密钥状态
+        api_key = @app_entity.api_keys.find(params[:key_id])
+        new_status = params[:active].to_s == "true"
+        api_key.update!(active: new_status)
+        render json: {
+          status: "success",
+          message: "API密钥已#{new_status ? '启用' : '停用'}"
+        }
+      when "update"
+        # 更新API密钥备注
+        api_key = @app_entity.api_keys.find(params[:key_id])
+        api_key.update!(remark: params[:remark])
+        render json: {
+          status: "success",
+          message: "API密钥备注已更新"
+        }
+      when "delete"
+        # 删除API密钥
+        api_key = @app_entity.api_keys.find(params[:key_id])
+        api_key.destroy!
+        render json: { status: "success", message: "API密钥已删除" }
+      else
+        render json: { error: "未知的操作类型" }, status: :bad_request
+      end
+    rescue ActiveRecord::RecordNotFound
+      render json: { error: "API密钥不存在" }, status: :not_found
     rescue => e
-      Rails.logger.error "重置密钥失败: #{e.message}\n#{e.backtrace.join("\n")}"
-      render json: { error: "重置密钥失败" }, status: :internal_server_error
+      Rails.logger.error "管理API密钥失败: #{e.message}\n#{e.backtrace.join("\n")}"
+      render json: { error: e.message }, status: :internal_server_error
     end
+
 
     private
 

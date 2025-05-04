@@ -254,10 +254,21 @@ module Api
       private
 
       def authorize_app_entity!
-        provided_token = request.headers["Authorization"] || params[:token]
-
+        # provided_token = request.headers["Authorization"] || params[:token]
+        provided_apikey = request.headers["X-Api-Key"] || params[:apikey]
+        provided_apisecret = request.headers["X-Api-Secret"] || params[:apisecret]
+        # 验证必要的参数
+        unless provided_apikey.present? && provided_apisecret.present?
+          render json: { error: "缺少必要的认证参数 apikey 和 apisecret" }, status: :unauthorized
+          return nil
+        end
+        # 查找API密钥并验证
+        api_key = ApiKey.find_by(apikey: provided_apikey)
+        if api_key && api_key.apisecret == provided_apisecret && api_key.active?
+          @app_entity = api_key.app_entity
+        end
         # 根据 token 查找 AppEntity
-        @app_entity = AppEntity.find_by(token: provided_token)
+        # @app_entity = AppEntity.find_by(token: provided_token)
 
         if @app_entity.nil? || @app_entity.inactive?
           render json: { error: "无授权访问或应用不存在" }, status: :unauthorized

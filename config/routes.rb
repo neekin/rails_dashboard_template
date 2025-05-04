@@ -6,7 +6,7 @@ Rails.application.routes.draw do
     get "profile", to: "profiles#show"
     resources :app_entities do
       member do
-        post :reset_token # 添加重置密钥的路由
+        post "manage_api_keys", to: "app_entities#manage_api_keys"
       end
     end
     resources :dynamic_tables do
