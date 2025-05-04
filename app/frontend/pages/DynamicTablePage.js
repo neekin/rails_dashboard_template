@@ -1,18 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { Button, Input, Modal, message, Popconfirm, Form, Tooltip } from "antd";
-import { InfoCircleOutlined } from '@ant-design/icons';
-import {
-  EditableProTable,
-  ProCard,
-  ProTable,
-  ProFormField,
-  ProFormRadio,
-} from "@ant-design/pro-components";
+import { InfoCircleOutlined } from "@ant-design/icons";
+import { ProTable } from "@ant-design/pro-components";
 import FieldEditor from "@/components/FieldEditor";
 import { apiFetch } from "@/lib/api/fetch";
-import { useParams } from "react-router";
+import { ArrowLeftOutlined } from "@ant-design/icons";
+import { useParams ,useNavigate } from "react-router";
 const DynamicTablePage = () => {
-  const { appId } = useParams(); 
+  const navigate = useNavigate(); // 确保已经导入
+  const { appId } = useParams();
   const [form] = Form.useForm();
   const [fields, setFields] = useState([]); // 字段数据
   const [modalVisible, setModalVisible] = useState(false);
@@ -32,9 +28,13 @@ const DynamicTablePage = () => {
     setLoading(true);
     try {
       const queryParams = {
-        ...params// 从 useParams 获取的 appId
+        ...params, // 从 useParams 获取的 appId
       };
-      const response = await apiFetch(`/api/dynamic_tables?query=${JSON.stringify(queryParams)}&appId=${appId}`);
+      const response = await apiFetch(
+        `/api/dynamic_tables?query=${JSON.stringify(
+          queryParams
+        )}&appId=${appId}`
+      );
 
       // 更新状态
       setTableData(response.data || []);
@@ -70,7 +70,7 @@ const DynamicTablePage = () => {
     try {
       await form.validateFields();
       const values = form.getFieldsValue();
-  
+
       const processedFields = fields.map((field) => ({
         ...field,
         id: null, // 确保新字段的ID为null
@@ -78,7 +78,7 @@ const DynamicTablePage = () => {
         field_type: field.field_type,
         required: !!field.required, // 确保布尔值
       }));
-  
+
       await apiFetch("/api/dynamic_tables", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -90,7 +90,7 @@ const DynamicTablePage = () => {
           app_entity: appId,
         }),
       });
-  
+
       message.success("表格创建成功");
       setModalVisible(false);
       setFields([]); // 清空字段数据
@@ -104,12 +104,12 @@ const DynamicTablePage = () => {
   // 处理更新表格
   const handleUpdateTable = async () => {
     if (!editingTable) return;
-    
+
     try {
       // 使用Form进行验证
       await form.validateFields();
       const values = form.getFieldsValue();
-      
+
       // 处理字段数据，确保每个字段的格式正确
       const processedFields = fields.map((field) => ({
         ...field,
@@ -126,11 +126,11 @@ const DynamicTablePage = () => {
         body: JSON.stringify({
           table_name: values.table_name,
           api_identifier: values.api_identifier,
-          webhook_url: values.webhook_url, 
+          webhook_url: values.webhook_url,
           fields: processedFields,
         }),
       });
-      
+
       message.success("表格更新成功");
       setModalVisible(false);
       setFields([]); // 清空字段数据
@@ -152,7 +152,7 @@ const DynamicTablePage = () => {
       const response = await apiFetch(`/api/dynamic_tables/${id}`, {
         method: "DELETE",
       });
-      
+
       message.success("表格删除成功");
       // 重新加载表格数据
       fetchTables({
@@ -169,25 +169,31 @@ const DynamicTablePage = () => {
   const handleEdit = async (record) => {
     // 设置编辑状态
     setEditingTable(record.id);
-    
+
     // 先填充基本数据
     form.setFieldsValue({
       table_name: record.table_name,
       api_identifier: record.api_identifier,
       webhook_url: record.webhook_url,
     });
-    
+
     // 不论record中是否有字段数据，都从服务器获取最新数据
     // 这确保我们总是使用最新的字段定义
     setFetchingFields(true);
     try {
       const detailData = await fetchTableDetail(record.id);
-      if (detailData && detailData.dynamic_fields && detailData.dynamic_fields.length > 0) {
+      if (
+        detailData &&
+        detailData.dynamic_fields &&
+        detailData.dynamic_fields.length > 0
+      ) {
         // 为每个字段添加key属性（用于EditableProTable）
-        setFields(detailData.dynamic_fields.map(f => ({ 
-          ...f, 
-          key: f.id
-        })));
+        setFields(
+          detailData.dynamic_fields.map((f) => ({
+            ...f,
+            key: f.id,
+          }))
+        );
       } else {
         setFields([]);
         console.log("该表格没有字段或字段加载失败");
@@ -203,18 +209,20 @@ const DynamicTablePage = () => {
 
   // 渲染API地址带复制功能
   const renderApiUrl = (text, record) => {
-    const apiUrl = record.api_url || `/api/v1/${record.table_name.toLowerCase()}`;
+    const apiUrl =
+      record.api_url || `/api/v1/${record.table_name.toLowerCase()}`;
     const baseUrl = window.location.origin;
     const fullUrl = `${baseUrl}${apiUrl}`;
-    
+
     return (
       <Tooltip title="点击复制API地址">
-        <span 
-          style={{ cursor: 'pointer', color: '#1890ff' }}
+        <span
+          style={{ cursor: "pointer", color: "#1890ff" }}
           onClick={() => {
-            navigator.clipboard.writeText(fullUrl)
-              .then(() => message.success('API地址已复制'))
-              .catch(err => message.error('复制失败'));
+            navigator.clipboard
+              .writeText(fullUrl)
+              .then(() => message.success("API地址已复制"))
+              .catch((err) => message.error("复制失败"));
           }}
         >
           {apiUrl}
@@ -239,7 +247,7 @@ const DynamicTablePage = () => {
     {
       title: "webhook地址",
       dataIndex: "webhook_url",
-      key: "webhook_url"
+      key: "webhook_url",
     },
     {
       title: "创建时间",
@@ -268,8 +276,8 @@ const DynamicTablePage = () => {
           okText="确定"
           cancelText="取消"
         >
-          <a style={{ color: 'red' }}>删除</a>
-        </Popconfirm>
+          <a style={{ color: "red" }}>删除</a>
+        </Popconfirm>,
       ],
     },
   ];
@@ -279,6 +287,12 @@ const DynamicTablePage = () => {
     fetchTables();
   }, []);
 
+  // 添加返回函数
+  const handleGoBack = () => {
+
+    navigate(`/admin/apps`);
+  };
+
   // 模态框标题和提交按钮根据当前模式确定
   const modalTitle = editingTable ? "编辑表格" : "创建新表格";
   const modalSubmitText = editingTable ? "更新" : "创建";
@@ -286,6 +300,11 @@ const DynamicTablePage = () => {
 
   return (
     <div>
+      <div style={{ marginBottom: 16 }}>
+        <Button icon={<ArrowLeftOutlined />} onClick={handleGoBack}>
+          返回应用列表
+        </Button>
+      </div>
       <ProTable
         headerTitle="动态表格管理"
         rowKey="id"
@@ -327,45 +346,57 @@ const DynamicTablePage = () => {
           form.resetFields();
         }}
         footer={[
-          <Button key="cancel" onClick={() => {
-            setModalVisible(false);
-            setEditingTable(null);
-            setFields([]);
-            form.resetFields();
-          }}>
+          <Button
+            key="cancel"
+            onClick={() => {
+              setModalVisible(false);
+              setEditingTable(null);
+              setFields([]);
+              form.resetFields();
+            }}
+          >
             取消
           </Button>,
-          <Button key="submit" type="primary" onClick={handleSubmit} loading={fetchingFields}>
+          <Button
+            key="submit"
+            type="primary"
+            onClick={handleSubmit}
+            loading={fetchingFields}
+          >
             {modalSubmitText}
           </Button>,
         ]}
       >
-        <Form
-          form={form}
-          layout="vertical"
-        >
+        <Form form={form} layout="vertical">
           <Form.Item
             name="table_name"
             label="表格名称"
             rules={[
-              { required: true, message: '请输入表格名称' },
-              { pattern: /^[a-zA-Z_][a-zA-Z0-9_]*$/, message: '只能包含字母、数字、下划线，且不能以数字开头' }
+              { required: true, message: "请输入表格名称" },
+              {
+                pattern: /^[a-zA-Z_][a-zA-Z0-9_]*$/,
+                message: "只能包含字母、数字、下划线，且不能以数字开头",
+              },
             ]}
           >
             <Input placeholder="例如: products, user_profiles" />
           </Form.Item>
-          
+
           <Form.Item
             name="api_identifier"
             label={
               <span>
-                API标识符 <Tooltip title="用于API访问路径，例如: /api/v1/products。可选，留空则使用表名。">
+                API标识符{" "}
+                <Tooltip title="用于API访问路径，例如: /api/v1/products。可选，留空则使用表名。">
                   <InfoCircleOutlined style={{ marginLeft: 5 }} />
                 </Tooltip>
               </span>
             }
             rules={[
-              { pattern: /^[a-z][a-z0-9_]*$/, message: '只能包含小写字母、数字和下划线，且必须以字母开头' }
+              {
+                pattern: /^[a-z][a-z0-9_]*$/,
+                message: "只能包含小写字母、数字和下划线，且必须以字母开头",
+              },
             ]}
           >
             <Input placeholder="例如: products, user_profiles" />
@@ -374,24 +405,34 @@ const DynamicTablePage = () => {
             name="webhook_url"
             label={
               <span>
-                Webhook URL <Tooltip title="当表格数据发生变化时，将触发此 URL 的回调。">
+                Webhook URL{" "}
+                <Tooltip title="当表格数据发生变化时，将触发此 URL 的回调。">
                   <InfoCircleOutlined style={{ marginLeft: 5 }} />
                 </Tooltip>
               </span>
             }
             rules={[
-              { type: 'url', message: '请输入有效的 URL 地址' },
-              { max: 255, message: 'URL 长度不能超过 255 个字符' },
+              { type: "url", message: "请输入有效的 URL 地址" },
+              { max: 255, message: "URL 长度不能超过 255 个字符" },
             ]}
           >
             <Input placeholder="例如: https://example.com/webhook" />
           </Form.Item>
         </Form>
-        
+
         <div style={{ marginTop: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 8,
+            }}
+          >
             <label>字段定义：</label>
-            {fetchingFields && <span style={{ color: '#1890ff' }}>加载字段中...</span>}
+            {fetchingFields && (
+              <span style={{ color: "#1890ff" }}>加载字段中...</span>
+            )}
           </div>
           <FieldEditor
             fields={fields}

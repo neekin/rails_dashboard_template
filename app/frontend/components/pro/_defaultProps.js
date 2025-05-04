@@ -17,29 +17,8 @@ import {
         },
         {
           path: '/admin/apps',
-          name: '管理页',
-          icon: <CrownFilled />,
-          access: 'canAdmin',
-          routes: [
-            // {
-            //   path: '/admin/sub-page1',
-            //   name: '一级页面',
-            //   icon: 'https://gw.alipayobjects.com/zos/antfincdn/upvrAjAPQX/Logo_Tech%252520UI.svg',
-            //   component: './Welcome',
-            // },
-            // {
-            //   path: '/admin/sub-page2',
-            //   name: '二级页面',
-            //   icon: <CrownFilled />,
-            //   component: './Welcome',
-            // },
-            // {
-            //   path: '/admin/sub-page3',
-            //   name: '三级页面',
-            //   icon: <CrownFilled />,
-            //   component: './Welcome',
-            // },
-          ],
+          name: '管理应用',
+          icon: <CrownFilled />
         },
         // {
         //   name: '列表页',

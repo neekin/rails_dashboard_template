@@ -134,7 +134,7 @@ module Api
 
         # 处理排序
         sort_field = query_params["sortField"].presence || "created_at"
-        sort_order = query_params["sortOrder"] == "ascend" ? "ASC" : "DESC"
+        sort_order = query_params["sortOrder"] == "asc" ? "ASC" : "DESC"
 
         # 确保排序字段是有效的列
         valid_sort_fields = model_class.column_names
