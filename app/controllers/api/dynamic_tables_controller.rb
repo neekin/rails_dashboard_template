@@ -91,25 +91,32 @@ module Api
         )
         table.save!
 
-        # 创建字段
+        # 创建字段 (并隐式创建/添加列)
         if params[:fields].present?
           params[:fields].each do |field|
-            table.dynamic_fields.create!(
+            created_field = table.dynamic_fields.create!(
               name: field[:name],
               field_type: field[:field_type],
               required: field[:required]
+              # 注意: unique 约束的处理可能需要在 DynamicTableService.add_field_to_physical_table 中完成
             )
+            # 在物理表中添加列 (这会调用 ensure_table_exists)
+            DynamicTableService.add_field_to_physical_table(table, created_field)
           end
+        else
+          # 如果没有初始字段，也确保基础表被创建
+          DynamicTableService.ensure_table_exists(table)
         end
-
-        # 创建物理表
-        DynamicTableService.create_physical_table(table)
 
         render json: table, status: :created
       end
     rescue ActiveRecord::RecordInvalid => e
       render json: { error: e.message }, status: :unprocessable_entity
+    rescue => e # 捕获 DynamicTableService 可能抛出的错误
+      Rails.logger.error "创建表格或字段失败: #{e.message}\n#{e.backtrace.join("\n")}"
+      render json: { error: "创建表格或添加字段时出错: #{e.message}" }, status: :internal_server_error
     end
+
 
     def show
       table = DynamicTable.find(params[:id])

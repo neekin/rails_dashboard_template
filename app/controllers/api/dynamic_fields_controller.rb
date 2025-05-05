@@ -1,67 +1,158 @@
 module Api
   class DynamicFieldsController < AdminController
     before_action :validate_user_ownership!, only: [ :index, :create ]
+    before_action :set_dynamic_table, only: [ :index, :create ]
+
 
     def index
-      table = DynamicTable.find(params[:dynamic_table_id])
-      fields = table.dynamic_fields
-      render json: { fields: fields, table_name: table.table_name }
+      # table = DynamicTable.find(params[:dynamic_table_id])
+      fields = @dynamic_table.dynamic_fields
+      render json: { fields: fields, table_name: @dynamic_table.table_name }
     end
 
+    # POST /api/dynamic_tables/:dynamic_table_id/dynamic_fields
     def create
-      fields = field_params
-      if fields.empty?
-        Rails.logger.info "收到空字段列表，将删除表中的所有字段"
-      end
+      error_messages = []
+      status_code = :created # Default to created
+      final_error_message = nil # Initialize error message
 
-      unless fields.is_a?(Array)
-        render json: { error: "Invalid fields data" }, status: :unprocessable_entity
-        return
-      end
+      begin # Wrap transaction and subsequent checks in begin/rescue
+        ActiveRecord::Base.transaction do
+          # Process fields from params
+          # Use strong parameters to permit expected attributes
+          fields_params = params.permit(fields: [ :id, :name, :field_type, :required, :unique ]).fetch(:fields, [])
 
-      updated_or_created_fields = []
-      ActiveRecord::Base.transaction do
-        dynamic_table = DynamicTable.find(params[:dynamic_table_id])
-        existing_fields = dynamic_table.dynamic_fields
+          # Keep track of field names to handle potential renames within the same request
+          old_names = {}
+          # Fetch existing fields once for efficient lookup
+          current_fields = @dynamic_table.dynamic_fields.index_by(&:id)
 
-        # 确保物理表存在
-        table_name = DynamicTableService.ensure_table_exists(dynamic_table)
+          fields_params.each do |field_attributes|
+            field_id = field_attributes[:id]&.to_i
+            field = field_id ? current_fields[field_id] : nil
+            new_field = nil # Initialize new_field for the 'else' block scope
 
-        # 找出需要删除的字段
-        incoming_field_ids = fields.map { |field| field[:id] }.compact
-        fields_to_delete = existing_fields.where.not(id: incoming_field_ids)
+            service_result = nil # To store result from DynamicTableService calls
 
-        # 删除多余的字段
-        fields_to_delete.each do |field|
-          begin
-            DynamicTableService.remove_field_from_physical_table(dynamic_table, field)
-            field.destroy!
-          rescue => e
+            if field # --- Existing field: Update ---
+              old_name = field.name # Store original name before assigning attributes
+              field.assign_attributes(field_attributes.except(:id)) # Update metadata attributes
+
+              if field.valid?
+                # Save metadata changes *before* physical changes
+                # Use save! to raise RecordInvalid on validation failure, caught by outer rescue
+                field.save!
+
+                # --- Handle physical table changes ---
+                # 1. Rename column if name changed?
+                if field.name_previously_changed?
+                  # !! 安全性: 确保 new_name 已在模型层验证格式 !!
+                  begin
+                    DynamicTableService.rename_field_in_physical_table(@dynamic_table, old_name, field.name)
+                    # Update old_names map *only on successful rename* for subsequent operations
+                    old_names[field.id] = field.name
+                  rescue => e # Catch specific errors if possible, e.g., StatementInvalid
+                    error_messages << "重命名字段 '#{old_name}' 到 '#{field.name}' 失败: #{e.message}"
+                    status_code = :unprocessable_entity
+                    # Continue processing other fields, rollback will happen later
+                  end
+                end
+
+                # 2. Change unique constraint if unique changed?
+                # Check if unique actually changed and no previous error occurred
+                if field.unique_previously_changed? && status_code != :unprocessable_entity
+                  # Use potentially renamed field name for the service call
+                  current_field_name = old_names[field.id] || field.name
+                  service_result = DynamicTableService.change_field_unique_constraint(@dynamic_table, current_field_name, field.unique)
+                  # Log service result for debugging
+                  Rails.logger.info "[Controller Create] Service result for unique constraint change on '#{current_field_name}': #{service_result.inspect}"
+                  # Check service_result below
+                end
+
+                # 3. Change type? (Add logic if needed)
+
+              else # Metadata validation failed (field.valid? was false)
+                error_messages << "字段 '#{field_attributes[:name] || old_name}' 更新失败: #{field.errors.full_messages.join(', ')}"
+                status_code = :unprocessable_entity # Mark as error
+              end
+
+            else # --- New field: Create ---
+              new_field = @dynamic_table.dynamic_fields.build(field_attributes)
+              if new_field.valid?
+                # Save metadata *before* physical changes
+                new_field.save! # Raises RecordInvalid on failure
+                # Add column to physical table
+                service_result = DynamicTableService.add_field_to_physical_table(@dynamic_table, new_field)
+                # Log service result for debugging
+                Rails.logger.info "[Controller Create] Service result for add field '#{new_field.name}': #{service_result.inspect}"
+                # Check service_result below
+              else # Metadata validation failed (new_field.valid? was false)
+                error_messages << "字段 '#{field_attributes[:name]}' 创建失败: #{new_field.errors.full_messages.join(', ')}"
+                status_code = :unprocessable_entity # Mark as error
+              end
+            end
+
+            # --- Check Service Result (from add_field or change_unique) ---
+            Rails.logger.info "[Controller Create] Checking service_result: #{service_result.inspect}"
+            # 首先检查 service_result 是否存在且失败
+            if service_result && !service_result[:success]
+              error_field_name = field ? (old_names[field.id] || field.name) : field_attributes[:name]
+              error_messages << "处理字段 '#{error_field_name}' 时出错: #{service_result[:error]}"
+              status_code = :unprocessable_entity # Mark as error
+            # 然后检查 service_result 是否为 nil，但我们期望它执行了 service 调用
+            elsif service_result.nil? && ((field&.unique_previously_changed?) || (!field && new_field&.persisted?)) && status_code != :unprocessable_entity
+              error_field_name = field ? (old_names[field.id] || field.name) : field_attributes[:name]
+              error_messages << "处理字段 '#{error_field_name}' 的物理表操作时发生意外情况，未能获取 Service 结果。"
+              status_code = :unprocessable_entity
+            end
+          end # end fields_params.each
+
+          # --- Final Check and Raise Rollback ---
+          if status_code == :unprocessable_entity
+            # Combine messages BEFORE raising rollback
+            final_error_message = error_messages.join("; ")
+            Rails.logger.info "[Controller Create] Raising Rollback due to errors: #{final_error_message}"
+            # Raise Rollback - this will trigger DB rollback
             raise ActiveRecord::Rollback
           end
+
+          # --- Success Path --- Render inside transaction
+          Rails.logger.info "[Controller Create] Transaction successful. Rendering success response."
+          render json: { table_name: @dynamic_table.table_name, fields: @dynamic_table.dynamic_fields.reload.as_json }, status: :created
+          # Explicitly return to prevent fall-through
+          return
+        end # End ActiveRecord::Base.transaction
+
+        # --- Check status code AFTER transaction block ---
+        # This part will only be reached if the transaction block finished
+        # without hitting the 'return' in the success path (i.e., if Rollback was raised)
+        if status_code == :unprocessable_entity
+          Rails.logger.warn "[Controller Create] Transaction rolled back. Rendering error response."
+          render json: { error: final_error_message.presence || "处理字段时发生错误，操作已回滚。" }, status: :unprocessable_entity
+        else
+          # This case should ideally not be reached.
+          Rails.logger.error "[Controller Create] Unexpected state after transaction block. Status code: #{status_code}"
+          render json: { error: "处理完成，但状态未知。" }, status: :internal_server_error
         end
 
-        # 更新或创建字段
-        fields.each do |field|
-          if field[:id].present?
-            update_existing_field(field, dynamic_table, updated_or_created_fields)
-          else
-            create_new_field(field, dynamic_table, updated_or_created_fields)
-          end
-        end
-      end
-
-      render json: { fields: updated_or_created_fields }, status: :created
-    rescue ActiveRecord::RecordInvalid => e
-      render json: { error: e.message }, status: :unprocessable_entity
-    rescue => e
-      Rails.logger.error "字段操作失败: #{e.message}\n#{e.backtrace.join("\n")}"
-      render json: { error: e.message }, status: :internal_server_error
+      rescue ActiveRecord::RecordInvalid => e # Catch validation errors during metadata save!
+        Rails.logger.error "[Controller Create] Caught RecordInvalid: #{e.message}"
+        render json: { error: "字段验证失败: #{e.record.errors.full_messages.join(', ')}" }, status: :unprocessable_entity
+      # Removed the rescue ActiveRecord::Rollback block
+      rescue => e # Catch any other unexpected errors
+        Rails.logger.error "[Controller Create] Caught generic error: #{e.class}: #{e.message}\n#{e.backtrace.join("\n")}"
+        render json: { error: "处理字段时发生内部服务器错误: #{e.message}" }, status: :internal_server_error
+      end # End begin/rescue
     end
 
     private
 
-
+    def set_dynamic_table
+      @dynamic_table = DynamicTable.find(params[:dynamic_table_id])
+      # Add authorization check if needed: authorize! :manage, @dynamic_table
+    rescue ActiveRecord::RecordNotFound
+      render json: { error: "指定的动态表未找到" }, status: :not_found
+    end
 
     def update_existing_field(field, dynamic_table, updated_or_created_fields)
       existing_field = DynamicField.find(field[:id])

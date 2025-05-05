@@ -309,4 +309,136 @@ RSpec.describe Api::DynamicRecordsController, type: :controller do
       expect(count).to eq(0)
     end
   end
+
+  describe "唯一约束功能" do
+    before do
+      # 创建一个带唯一约束的字段
+      @email_field = @table.dynamic_fields.create(name: "email", field_type: "string", required: false, unique: true)
+
+      # 确保物理表包含该字段和唯一索引
+      table_name = physical_table_name(@table)
+      unless ActiveRecord::Base.connection.column_exists?(table_name, "email")
+        ActiveRecord::Base.connection.add_column(table_name, "email", :string)
+        ActiveRecord::Base.connection.add_index(table_name, :email, unique: true)
+      end
+    end
+
+    it "创建带有唯一值的记录成功" do
+      post :create, params: {
+        dynamic_table_id: @table.id,
+        record: { name: "唯一约束测试", age: 30, email: "unique@example.com" }
+      }
+
+      expect(response).to have_http_status(:ok)
+
+      # 验证记录是否创建
+      table_name = physical_table_name(@table)
+      record = ActiveRecord::Base.connection.select_one(
+        "SELECT * FROM #{table_name} WHERE email = 'unique@example.com'"
+      )
+      expect(record).not_to be_nil
+      expect(record["name"]).to eq("唯一约束测试")
+    end
+
+    it "创建带有重复值的记录失败" do
+      # 先创建一条记录
+      post :create, params: {
+        dynamic_table_id: @table.id,
+        record: { name: "第一条记录", age: 25, email: "duplicate@example.com" }
+      }
+      expect(response).to have_http_status(:ok)
+
+      # 尝试创建具有相同 email 的记录
+      post :create, params: {
+        dynamic_table_id: @table.id,
+        record: { name: "第二条记录", age: 35, email: "duplicate@example.com" }
+      }
+
+      # 应该失败，违反唯一约束
+      expect(response).to have_http_status(:unprocessable_entity)
+      json_response = JSON.parse(response.body)
+      expect(json_response["error"]).to include("违反唯一约束")
+
+      # 验证只有第一条记录被创建
+      table_name = physical_table_name(@table)
+      count = ActiveRecord::Base.connection.select_value(
+        "SELECT COUNT(*) FROM #{table_name} WHERE email = 'duplicate@example.com'"
+      )
+      expect(count).to eq(1)
+    end
+
+    it "更新记录为唯一值成功" do
+      # 先创建两条记录
+      post :create, params: {
+        dynamic_table_id: @table.id,
+        record: { name: "记录A", age: 30, email: "a@example.com" }
+      }
+      expect(response).to have_http_status(:ok)
+
+      post :create, params: {
+        dynamic_table_id: @table.id,
+        record: { name: "记录B", age: 40, email: "b@example.com" }
+      }
+      expect(response).to have_http_status(:ok)
+
+      # 获取记录A的ID
+      table_name = physical_table_name(@table)
+      record_a = ActiveRecord::Base.connection.select_one(
+        "SELECT * FROM #{table_name} WHERE email = 'a@example.com'"
+      )
+
+      # 更新记录A的email为新值
+      put :update, params: {
+        dynamic_table_id: @table.id,
+        id: record_a["id"],
+        record: { email: "new_a@example.com" }
+      }
+      expect(response).to have_http_status(:ok)
+
+      # 验证更新成功
+      updated_record = ActiveRecord::Base.connection.select_one(
+        "SELECT * FROM #{table_name} WHERE id = #{record_a["id"]}"
+      )
+      expect(updated_record["email"]).to eq("new_a@example.com")
+    end
+
+    it "更新记录为重复值失败" do
+      # 先创建两条记录
+      post :create, params: {
+        dynamic_table_id: @table.id,
+        record: { name: "记录C", age: 50, email: "c@example.com" }
+      }
+      expect(response).to have_http_status(:ok)
+
+      post :create, params: {
+        dynamic_table_id: @table.id,
+        record: { name: "记录D", age: 60, email: "d@example.com" }
+      }
+      expect(response).to have_http_status(:ok)
+
+      # 获取记录C的ID
+      table_name = physical_table_name(@table)
+      record_c = ActiveRecord::Base.connection.select_one(
+        "SELECT * FROM #{table_name} WHERE email = 'c@example.com'"
+      )
+
+      # 尝试更新记录C的email为记录D的email
+      put :update, params: {
+        dynamic_table_id: @table.id,
+        id: record_c["id"],
+        record: { email: "d@example.com" }
+      }
+
+      # 应该失败，违反唯一约束
+      expect(response).to have_http_status(:unprocessable_entity)
+      json_response = JSON.parse(response.body)
+      expect(json_response["error"]).to include("违反唯一约束")
+
+      # 验证记录C未被更新
+      unchanged_record = ActiveRecord::Base.connection.select_one(
+        "SELECT * FROM #{table_name} WHERE id = #{record_c["id"]}"
+      )
+      expect(unchanged_record["email"]).to eq("c@example.com")
+    end
+  end
 end

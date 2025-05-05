@@ -1,9 +1,21 @@
 ### getAll 
-GET http://127.0.0.1:3000/api/v1/ttt?token=nWKTpdsBE7C7xsB3oDBt1tQQ
+GET http://127.0.0.1:3000/api/v1/tt
+Content-Type: application/json
+X-Api-Key: CYPhW1je2g7pN1Vtc7QJhX4W
+X-Api-Secret: 17ced18e9ec9f93387111bec5b82fa7b00317f2fa4163c4aad62a05d59874e1a
+
+
+### get a record
+GET http://127.0.0.1:3000/api/v1/tt/1
+Content-Type: application/json
+X-Api-Key: CYPhW1je2g7pN1Vtc7QJhX4W
+X-Api-Secret: 17ced18e9ec9f93387111bec5b82fa7b00317f2fa4163c4aad62a05d59874e1a
 
 ### create a record
-POST http://127.0.0.1:3000/api/v1/ttt?token=nWKTpdsBE7C7xsB3oDBt1tQQ
+POST http://127.0.0.1:3000/api/v1/tt
 Content-Type: application/json
+X-Api-Key: CYPhW1je2g7pN1Vtc7QJhX4W
+X-Api-Secret: 17ced18e9ec9f93387111bec5b82fa7b00317f2fa4163c4aad62a05d59874e1a
 
 {
   "name": "John Doe",
@@ -12,14 +24,48 @@ Content-Type: application/json
 
 
 
-### Update a record
-PUT http://127.0.0.1:3000/api/v1/ttt/1?token=nWKTpdsBE7C7xsB3oDBt1tQQ
-Content-Type: application/json
+### Update a record with avatar
 
-{
-  "name": "NeeKin",
-  "age": 25
-}
+PUT http://127.0.0.1:3000/api/v1/tt/2
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+X-Api-Key: CYPhW1je2g7pN1Vtc7QJhX4W
+X-Api-Secret: 17ced18e9ec9f93387111bec5b82fa7b00317f2fa4163c4aad62a05d59874e1a
+
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="avatar"; filename="test_image.jpg"
+Content-Type: image/jpeg
+
+< ./spec/fixtures/files/test_image.jpg
+------WebKitFormBoundary7MA4YWxkTrZu0gW--
+
 
 ### delete a record
-DELETE http://127.0.0.1:3000/api/v1/ttt/1?token=nWKTpdsBE7C7xsB3oDBt1tQQ
+DELETE http://127.0.0.1:3000/api/v1/ttt/1
+Content-Type: application/json
+X-Api-Key: CYPhW1je2g7pN1Vtc7QJhX4W
+X-Api-Secret: 17ced18e9ec9f93387111bec5b82fa7b00317f2fa4163c4aad62a05d59874e1aContent-Type: application/json
+
+# apikey=CYPhW1je2g7pN1Vtc7QJhX4W
+# apisecret=17ced18e9ec9f93387111bec5b82fa7b00317f2fa4163c4aad62a05d59874e1a
+
+
+### Update a record with name, age, and avatar
+PUT http://127.0.0.1:3000/api/v1/tt/2
+Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
+X-Api-Key: CYPhW1je2g7pN1Vtc7QJhX4W
+X-Api-Secret: 17ced18e9ec9f93387111bec5b82fa7b00317f2fa4163c4aad62a05d59874e1a
+
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="name"
+
+Jane Doe Updated
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="age"
+
+35
+------WebKitFormBoundary7MA4YWxkTrZu0gW
+Content-Disposition: form-data; name="avatar"; filename="test_image.jpg"
+Content-Type: image/jpeg
+
+< ./spec/fixtures/files/test_image.jpg
+------WebKitFormBoundary7MA4YWxkTrZu0gW--

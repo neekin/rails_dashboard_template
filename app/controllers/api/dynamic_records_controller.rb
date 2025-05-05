@@ -262,32 +262,53 @@ module Api
 
 
 
-      # 处理文件字段
-      file_fields = @dynamic_table.dynamic_fields.where(field_type: "file").pluck(:name)
-      Rails.logger.debug "File fields from DB: #{file_fields.inspect}"
+    # 处理文件字段
+    file_fields = @dynamic_table.dynamic_fields.where(field_type: "file").pluck(:name)
+    Rails.logger.debug "File fields from DB: #{file_fields.inspect}"
 
       file_fields.each do |file_field|
         Rails.logger.debug "Processing file field: #{file_field}"
-        if record_params[file_field].present?
-          uploaded_file = record_params[file_field]
-          Rails.logger.debug "Uploaded file object class: #{uploaded_file.class.name}"
-          Rails.logger.debug "Uploaded file details: #{uploaded_file.inspect}"
+        # 首先检查参数中是否包含该字段
+        if params[:record].key?(file_field)
+          # 如果字段存在于提交的参数中
+          if record_params[file_field].present?
+            uploaded_file = record_params[file_field]
+            Rails.logger.debug "Uploaded file object class: #{uploaded_file.class.name}"
+            Rails.logger.debug "Uploaded file details: #{uploaded_file.inspect}"
 
-          # 检查文件对象
-          if uploaded_file.is_a?(ActionDispatch::Http::UploadedFile)
-            record_params[file_field] = ActiveStorage::Blob.create_and_upload!(
-              io: uploaded_file.tempfile,
-              filename: uploaded_file.original_filename,
-              content_type: uploaded_file.content_type
-            ).signed_id
-            Rails.logger.debug "File successfully processed and stored with signed_id"
-          else
-            Rails.logger.error "Invalid file format for field: #{file_field}"
-            render json: { error: "Invalid file format for field: #{file_field}" }, status: :unprocessable_entity
-            return
+            # 检查文件对象
+            if uploaded_file.is_a?(ActionDispatch::Http::UploadedFile)
+              # 如果是新上传的文件，处理并保存
+              record_params[file_field] = ActiveStorage::Blob.create_and_upload!(
+                io: uploaded_file.tempfile,
+                filename: uploaded_file.original_filename,
+                content_type: uploaded_file.content_type
+              ).signed_id
+              Rails.logger.debug "File successfully processed and stored with signed_id"
+            elsif uploaded_file.is_a?(String) && uploaded_file.match?(/^eyJfcmFpbHMiOnsibWVzc2FnZSI6/)
+              # 如果已经是有效的 signed_id，则保留（可能是前端回传的已有文件ID）
+              Rails.logger.debug "Field #{file_field} already contains a valid signed_id"
+            elsif uploaded_file.is_a?(String) && (uploaded_file.start_with?("http://") || uploaded_file.start_with?("https://") || uploaded_file.start_with?("/"))
+              # 如果是URL形式，可能是前端回传的文件URL，忽略此次更新
+              Rails.logger.debug "Field #{file_field} contains a URL, keeping original value"
+              record_params.delete(file_field)
+            else
+              Rails.logger.error "Invalid file format for field: #{file_field}, class: #{uploaded_file.class.name}, value: #{uploaded_file.inspect}"
+              render json: { error: "文件格式无效：#{file_field}。请上传有效的文件或清空该字段。" }, status: :unprocessable_entity
+              return
+            end
+          elsif record_params[file_field] == "" || record_params[file_field] == nil
+            # 用户明确清除了字段内容
+            record_params[file_field] = nil
+            Rails.logger.debug "Clearing content for file field: #{file_field}"
           end
+        else
+          # 参数中没有包含此字段，表示用户没有操作该字段，应保持原值
+          # 从record_params中移除该字段，防止影响原有值
+          record_params.delete(file_field)
+          Rails.logger.debug "Field #{file_field} not included in params, keeping original value"
         end
-      end
+    end
       # 根据字段类型转换参数值
       updates = record_params.map do |key, value|
         field_type = fields[key]

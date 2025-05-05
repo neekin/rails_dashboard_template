@@ -219,28 +219,66 @@ module Api
         render json: record_hash
       end
 
-      # POST /api/v1/:identifier
       def create
         model_class = DynamicTableService.get_dynamic_model(@table)
-        @record = model_class.new(record_params)
 
+        # 1. 分离普通参数和文件参数
+        regular_params = record_params.except(*file_field_names)
+        file_params = record_params.slice(*file_field_names)
+
+        # 2. 使用普通参数初始化记录
+        @record = model_class.new(regular_params)
+
+        puts "创建前的记录 (仅普通参数): #{@record.inspect}"
+        puts "普通参数: #{regular_params.inspect}"
+        puts "文件参数: #{file_params.inspect}"
+
+        # 3. 处理文件字段并更新记录实例
+        handle_file_fields(@record, file_params) # 传递只包含文件字段的参数
+
+        # 4. 保存记录
         if @record.save
+          puts "保存后的记录: #{@record.reload.inspect}"
           trigger_webhook("create", @record)
-          render json: @record, status: :created
+          # 为响应添加文件URL
+          response_data = prepare_record_with_file_urls(@record)
+          render json: response_data, status: :created # 返回包含URL的记录
         else
+          puts "保存失败: #{@record.errors.full_messages}"
           render json: { error: @record.errors.full_messages.join(", ") }, status: :unprocessable_entity
         end
       end
 
-      # PUT/PATCH /api/v1/:identifier/:id
       def update
-        if @record.update(record_params)
+        # 1. 分离普通参数和文件参数
+        regular_params = record_params.except(*file_field_names)
+        file_params = record_params.slice(*file_field_names)
+
+        puts "更新前的记录: #{@record.inspect}"
+        puts "普通参数: #{regular_params.inspect}"
+        puts "文件参数: #{file_params.inspect}"
+
+        # 2. 处理文件字段并更新记录实例
+        # 注意：handle_file_fields 直接修改 @record 实例
+        handle_file_fields(@record, file_params)
+
+        # 3. 使用普通参数更新记录的其他字段
+        # 由于 handle_file_fields 已经修改了 @record 实例上的文件字段,
+        # 调用 update 时，这些更改也会被包含在内。
+        if @record.update(regular_params)
+          puts "更新后的记录: #{@record.reload.inspect}"
           trigger_webhook("update", @record)
-          render json: @record
+
+          # 为响应添加文件URL
+          response_data = prepare_record_with_file_urls(@record)
+          render json: response_data
         else
+          puts "更新失败: #{@record.errors.full_messages}"
           render json: { error: @record.errors.full_messages.join(", ") }, status: :unprocessable_entity
         end
       end
+
+
 
       # DELETE /api/v1/:identifier/:id
       def destroy
@@ -253,8 +291,86 @@ module Api
 
       private
 
+      def prepare_record_with_file_urls(record)
+        file_field_names = @table.dynamic_fields.where(field_type: "file").pluck(:name)
+        record_hash = record.attributes
+
+        file_field_names.each do |field_name|
+          signed_id = record_hash[field_name]
+          if signed_id.present?
+            begin
+              record_hash["#{field_name}_url"] = dynamic_record_file_url(
+                identifier: @table.api_identifier || @table.table_name,
+                id: record.id,
+                field_name: field_name,
+                host: request.host_with_port,
+                signed_id: signed_id
+              )
+            rescue => e
+              record_hash["#{field_name}_url"] = nil
+            end
+          else
+            record_hash["#{field_name}_url"] = nil
+          end
+          record_hash.delete(field_name) # 从响应中移除原始signed_id
+        end
+
+        record_hash
+      end
+
+
+      def handle_file_fields(record, file_params_hash) # 参数名改为 file_params_hash 更清晰
+        # 确保传入的是包含文件字段的哈希或参数对象
+        return unless file_params_hash.is_a?(ActionController::Parameters) || file_params_hash.is_a?(Hash)
+        puts "--- 处理文件字段 ---"
+        # file_fields = @table.dynamic_fields.where(field_type: "file") # 这行不需要了
+        # file_field_names = file_fields.pluck(:name) # 也不需要，因为我们已经知道哪些是文件字段
+
+        file_params_hash.each do |field_name, file_value|
+          # 确保我们只处理预期的文件字段（虽然调用者应该已经过滤好了）
+          next unless file_field_names.include?(field_name.to_s)
+
+          puts "处理字段: #{field_name}, 值类型: #{file_value.class}"
+
+          if file_value.is_a?(ActionDispatch::Http::UploadedFile)
+            # 上传文件处理
+            begin
+              blob = ActiveStorage::Blob.create_and_upload!(
+                io: file_value.tempfile,
+                filename: file_value.original_filename,
+                content_type: file_value.content_type
+              )
+              record[field_name] = blob.signed_id
+              puts "字段 #{field_name} 设置为 signed_id: #{blob.signed_id}"
+            rescue => e
+              Rails.logger.error "Error uploading file for field #{field_name}: #{e.message}"
+              # 可以考虑在这里添加错误到 record.errors
+              record.errors.add(field_name.to_sym, "文件上传失败: #{e.message}")
+            end
+          elsif file_value.blank? || file_value == "null" || file_value == "" # 明确处理空值或表示删除的字符串
+            # 清除文件字段
+            # 如果记录已经有关联的文件，需要先删除旧的 Blob
+            if record.persisted? && record.send(field_name).present?
+              begin
+                old_blob = ActiveStorage::Blob.find_signed(record.send(field_name))
+                old_blob&.purge_later # 异步删除
+              rescue ActiveSupport::MessageVerifier::InvalidSignature, ActiveRecord::RecordNotFound
+                # 如果找不到旧文件或签名无效，忽略
+              rescue => e
+                 Rails.logger.error "Error purging old blob for field #{field_name}: #{e.message}"
+              end
+            end
+            record[field_name] = nil
+            puts "字段 #{field_name} 设置为 nil"
+            # else
+            # 如果值不是 UploadedFile 也不是 blank/null，则忽略，不改变现有值
+            # puts "字段 #{field_name} 的值不是文件或空值，跳过处理。"
+          end
+        end
+        puts "--- 文件字段处理完毕 ---"
+      end
+
       def authorize_app_entity!
-        # provided_token = request.headers["Authorization"] || params[:token]
         provided_apikey = request.headers["X-Api-Key"] || params[:apikey]
         provided_apisecret = request.headers["X-Api-Secret"] || params[:apisecret]
         # 验证必要的参数
@@ -267,8 +383,7 @@ module Api
         if api_key && api_key.apisecret == provided_apisecret && api_key.active?
           @app_entity = api_key.app_entity
         end
-        # 根据 token 查找 AppEntity
-        # @app_entity = AppEntity.find_by(token: provided_token)
+
 
         if @app_entity.nil? || @app_entity.inactive?
           render json: { error: "无授权访问或应用不存在" }, status: :unauthorized
@@ -316,20 +431,33 @@ module Api
       end
 
       def find_record
+        puts "Finding record with ID: #{params[:id]} in table: #{@table.table_name}"
         model_class = DynamicTableService.get_dynamic_model(@table)
+        puts "Model class: #{model_class}"
+        puts "Table name: #{model_class.table_name}"
+        puts "Available columns: #{model_class.column_names.inspect}"
         @record = model_class.find_by(id: params[:id])
+        puts "Record found: #{@record.inspect}"
 
         unless @record
+          puts "Record not found!"
           render json: { error: "找不到记录 ##{params[:id]}" }, status: :not_found
-          false
+          return false
         end
+
+        true
       end
 
       def record_params
-        permitted_fields = @table.dynamic_fields.pluck(:name)
-        params.require(:record).permit(permitted_fields)
-      rescue ActionController::ParameterMissing
-        params.permit(permitted_fields)
+        # 允许所有定义的字段（包括文件字段）
+        # 在 controller action 中再分离它们
+        permitted_fields = @table.dynamic_fields.pluck(:name).map(&:to_sym)
+        params.permit(*permitted_fields)
+      end
+
+      def file_field_names
+        # 缓存结果以提高效率
+        @file_field_names ||= @table.dynamic_fields.where(field_type: "file").pluck(:name)
       end
     end
   end
