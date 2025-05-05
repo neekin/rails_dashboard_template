@@ -42,7 +42,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_05_04_111514) do
   create_table "api_keys", force: :cascade do |t|
     t.string "apikey"
     t.string "apisecret"
-    t.integer "app_entity_id", null: false
+    t.bigint "app_entity_id", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.boolean "active"
@@ -58,23 +58,13 @@ ActiveRecord::Schema[8.0].define(version: 2025_05_04_111514) do
     t.integer "status", default: 0
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.integer "user_id", null: false
+    t.bigint "user_id", null: false
     t.index ["user_id"], name: "index_app_entities_on_user_id"
   end
 
-# Could not dump table "dyn_1" because of following StandardError
-#   Unknown type '' for column 'id'
-
-
-  create_table "dyn_2", force: :cascade do |t|
-    t.string "name"
-    t.string "ag222"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-  end
 
   create_table "dynamic_fields", force: :cascade do |t|
-    t.integer "dynamic_table_id", null: false
+    t.bigint "dynamic_table_id", null: false
     t.string "name"
     t.string "field_type"
     t.boolean "required"
@@ -89,7 +79,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_05_04_111514) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.string "api_identifier"
-    t.integer "app_entity_id", null: false
+    t.bigint "app_entity_id", null: false
     t.string "webhook_url"
     t.index ["api_identifier"], name: "index_dynamic_tables_on_api_identifier", unique: true
     t.index ["app_entity_id"], name: "index_dynamic_tables_on_app_entity_id"

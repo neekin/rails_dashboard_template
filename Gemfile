@@ -62,3 +62,5 @@ gem "jwt"
 gem "rack-cors"
 
 gem "aws-sdk-s3", "~> 1.184"
+
+gem "mysql2", "~> 0.5.6"
