@@ -1,21 +1,21 @@
 ### getAll 
 GET http://127.0.0.1:3000/api/v1/tt
 Content-Type: application/json
-X-Api-Key: CYPhW1je2g7pN1Vtc7QJhX4W
-X-Api-Secret: 17ced18e9ec9f93387111bec5b82fa7b00317f2fa4163c4aad62a05d59874e1a
+X-Api-Key: 3TYxPB7oS4PyG6YGi1aaqVjK
+X-Api-Secret: 231081212d56550534493800f15db66519cf613551a2ce47f6daa936f2681b7a
 
 
 ### get a record
 GET http://127.0.0.1:3000/api/v1/tt/1
 Content-Type: application/json
-X-Api-Key: CYPhW1je2g7pN1Vtc7QJhX4W
-X-Api-Secret: 17ced18e9ec9f93387111bec5b82fa7b00317f2fa4163c4aad62a05d59874e1a
+X-Api-Key: 3TYxPB7oS4PyG6YGi1aaqVjK
+X-Api-Secret: 231081212d56550534493800f15db66519cf613551a2ce47f6daa936f2681b7a
 
 ### create a record
 POST http://127.0.0.1:3000/api/v1/tt
 Content-Type: application/json
-X-Api-Key: CYPhW1je2g7pN1Vtc7QJhX4W
-X-Api-Secret: 17ced18e9ec9f93387111bec5b82fa7b00317f2fa4163c4aad62a05d59874e1a
+X-Api-Key: 3TYxPB7oS4PyG6YGi1aaqVjK
+X-Api-Secret: 231081212d56550534493800f15db66519cf613551a2ce47f6daa936f2681b7a
 
 {
   "name": "John Doe",
@@ -28,8 +28,8 @@ X-Api-Secret: 17ced18e9ec9f93387111bec5b82fa7b00317f2fa4163c4aad62a05d59874e1a
 
 PUT http://127.0.0.1:3000/api/v1/tt/2
 Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
-X-Api-Key: CYPhW1je2g7pN1Vtc7QJhX4W
-X-Api-Secret: 17ced18e9ec9f93387111bec5b82fa7b00317f2fa4163c4aad62a05d59874e1a
+X-Api-Key: 3TYxPB7oS4PyG6YGi1aaqVjK
+X-Api-Secret: 231081212d56550534493800f15db66519cf613551a2ce47f6daa936f2681b7a
 
 ------WebKitFormBoundary7MA4YWxkTrZu0gW
 Content-Disposition: form-data; name="avatar"; filename="test_image.jpg"
@@ -42,18 +42,18 @@ Content-Type: image/jpeg
 ### delete a record
 DELETE http://127.0.0.1:3000/api/v1/ttt/1
 Content-Type: application/json
-X-Api-Key: CYPhW1je2g7pN1Vtc7QJhX4W
-X-Api-Secret: 17ced18e9ec9f93387111bec5b82fa7b00317f2fa4163c4aad62a05d59874e1aContent-Type: application/json
+X-Api-Key: 3TYxPB7oS4PyG6YGi1aaqVjK
+X-Api-Secret: 231081212d56550534493800f15db66519cf613551a2ce47f6daa936f2681b7aContent-Type: application/json
 
-# apikey=CYPhW1je2g7pN1Vtc7QJhX4W
-# apisecret=17ced18e9ec9f93387111bec5b82fa7b00317f2fa4163c4aad62a05d59874e1a
+# apikey=3TYxPB7oS4PyG6YGi1aaqVjK
+# apisecret=231081212d56550534493800f15db66519cf613551a2ce47f6daa936f2681b7a
 
 
 ### Update a record with name, age, and avatar
 PUT http://127.0.0.1:3000/api/v1/tt/2
 Content-Type: multipart/form-data; boundary=----WebKitFormBoundary7MA4YWxkTrZu0gW
-X-Api-Key: CYPhW1je2g7pN1Vtc7QJhX4W
-X-Api-Secret: 17ced18e9ec9f93387111bec5b82fa7b00317f2fa4163c4aad62a05d59874e1a
+X-Api-Key: 3TYxPB7oS4PyG6YGi1aaqVjK
+X-Api-Secret: 231081212d56550534493800f15db66519cf613551a2ce47f6daa936f2681b7a
 
 ------WebKitFormBoundary7MA4YWxkTrZu0gW
 Content-Disposition: form-data; name="name"

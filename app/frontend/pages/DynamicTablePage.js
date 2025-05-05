@@ -285,6 +285,7 @@ const DynamicTablePage = () => {
   // 初始加载
   useEffect(() => {
     fetchTables();
+    localStorage.setItem("appId", appId); // 将appId存储到localStorage
   }, []);
 
   // 添加返回函数

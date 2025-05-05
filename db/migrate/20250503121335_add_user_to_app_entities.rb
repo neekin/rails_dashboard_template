@@ -2,7 +2,7 @@ class AddUserToAppEntities < ActiveRecord::Migration[8.0]
   def up
     # 添加user_id列
     unless column_exists?(:app_entities, :user_id)
-      add_column :app_entities, :user_id, :integer
+      add_column :app_entities, :user_id, :bigint
 
       # 如果已经有app_entities记录，创建默认用户并关联
       if table_exists?(:app_entities) && has_records?(:app_entities)

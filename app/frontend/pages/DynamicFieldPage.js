@@ -54,7 +54,7 @@ const DynamicFieldPage = () => {
 
   // 添加返回函数
   const handleGoBack = () => {
-    const appId = localStorage.getItem('lastAppId') || '';
+    const appId = localStorage.getItem('appId') || '';
     navigate(`/admin/dynamic_tables/${appId}`);
   };
 

@@ -159,19 +159,28 @@ module Api
 
       begin
         result = ActiveRecord::Base.connection.execute(sql)
-        if result
-          head :ok
-        else
-          render json: { error: "Failed to create record" }, status: :unprocessable_entity
-        end
+        head :created
       rescue ActiveRecord::RecordNotUnique => e
         Rails.logger.error "Unique constraint violation: #{e.message}"
-        render json: { error: "记录创建失败，违反唯一约束，请检查输入数据。" }, status: :unprocessable_entity
-      rescue => e
-        Rails.logger.error "SQL Execution Error: #{e.message}"
-        render json: { error: e.message }, status: :internal_server_error
+        # 尝试提取冲突字段名
+        field_name = extract_duplicate_field_from_error(e.message)
+        error_message = field_name ? "字段 '#{field_name}' 的值必须唯一。" : "记录违反了唯一性约束。"
+        render json: { errors: [ error_message ] }, status: :unprocessable_entity
+      rescue ActiveRecord::StatementInvalid => e # 捕获其他可能的数据库错误
+        # 再次检查是否是唯一性约束错误（有时可能不被识别为 RecordNotUnique）
+        if e.message.match?(/duplicate entry|unique constraint/i)
+          field_name = extract_duplicate_field_from_error(e.message)
+          error_message = field_name ? "字段 '#{field_name}' 的值必须唯一。" : "记录违反了唯一性约束。"
+          render json: { errors: [ error_message ] }, status: :unprocessable_entity
+        else
+          Rails.logger.error "SQL Execution Error: #{e.message}"
+          render json: { errors: [ "创建记录时发生数据库错误" ] }, status: :internal_server_error
+        end
+      rescue => e # 捕获其他未知错误
+        Rails.logger.error "Unexpected Error during SQL Execution: #{e.message}"
+        render json: { errors: [ "创建记录时发生未知错误" ] }, status: :internal_server_error
       end
-    end
+    end # 结束 create 方法
 
     def index
       # table = DynamicTable.find(params[:dynamic_table_id])
@@ -339,18 +348,31 @@ module Api
       Rails.logger.info "Executing SQL: #{sql}"
 
       begin
-        result = ActiveRecord::Base.connection.execute(sql)
-        if result
-          head :ok
-        else
-          render json: { error: "Failed to update record" }, status: :unprocessable_entity
-        end
+        # 执行 UPDATE 语句
+        ActiveRecord::Base.connection.execute(sql)
+
+        # 如果没有异常抛出，则认为更新成功
+        head :ok # 200 OK 表示成功更新
+
       rescue ActiveRecord::RecordNotUnique => e
-        Rails.logger.error "Unique constraint violation: #{e.message}"
-        render json: { error: "记录创建失败，违反唯一约束，请检查输入数据。" }, status: :unprocessable_entity
-      rescue => e
-        Rails.logger.error "SQL Execution Error: #{e.message}"
-        render json: { error: e.message }, status: :internal_server_error
+        Rails.logger.error "Unique constraint violation during update: #{e.message}"
+        # 尝试提取冲突字段名
+        field_name = extract_duplicate_field_from_error(e.message)
+        error_message = field_name ? "更新失败，字段 '#{field_name}' 的值必须唯一。" : "更新失败，记录违反了唯一性约束。"
+        render json: { errors: [ error_message ] }, status: :unprocessable_entity
+      rescue ActiveRecord::StatementInvalid => e
+        # 再次检查是否是唯一性约束错误
+        if e.message.match?(/duplicate entry|unique constraint/i)
+          field_name = extract_duplicate_field_from_error(e.message)
+          error_message = field_name ? "更新失败，字段 '#{field_name}' 的值必须唯一。" : "更新失败，记录违反了唯一性约束。"
+          render json: { errors: [ error_message ] }, status: :unprocessable_entity
+        else
+          Rails.logger.error "SQL Execution Error during update: #{e.message}"
+          render json: { errors: [ "更新记录时发生数据库错误" ] }, status: :internal_server_error
+        end
+      rescue => e # 捕获其他未知错误
+        Rails.logger.error "Unexpected Error during update SQL Execution: #{e.message}"
+        render json: { errors: [ "更新记录时发生未知错误" ] }, status: :internal_server_error
       end
     end
 
@@ -365,6 +387,10 @@ module Api
 
     private
 
+    def extract_duplicate_field_from_error(message)
+      match = message.match(/key '.*?\.index_.*?_on_(.*?)'/)
+      match ? match[1] : nil
+    end
 
     def dynamic_record_file_url(options = {})
       table_id = options[:table_id]
