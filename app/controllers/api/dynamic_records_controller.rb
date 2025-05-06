@@ -160,25 +160,19 @@ module Api
       begin
         result = ActiveRecord::Base.connection.execute(sql)
         head :created
-      rescue ActiveRecord::RecordNotUnique => e
-        Rails.logger.error "Unique constraint violation: #{e.message}"
-        # 尝试提取冲突字段名
-        field_name = extract_duplicate_field_from_error(e.message)
-        error_message = field_name ? "字段 '#{field_name}' 的值必须唯一。" : "记录违反了唯一性约束。"
-        render json: { errors: [ error_message ] }, status: :unprocessable_entity
-      rescue ActiveRecord::StatementInvalid => e # 捕获其他可能的数据库错误
-        # 再次检查是否是唯一性约束错误（有时可能不被识别为 RecordNotUnique）
-        if e.message.match?(/duplicate entry|unique constraint/i)
+      rescue ActiveRecord::RecordNotUnique, ActiveRecord::StatementInvalid => e
+        # 检查是否是唯一约束错误
+        if e.message.match?(/duplicate entry|unique constraint|violates unique/i)
           field_name = extract_duplicate_field_from_error(e.message)
-          error_message = field_name ? "字段 '#{field_name}' 的值必须唯一。" : "记录违反了唯一性约束。"
-          render json: { errors: [ error_message ] }, status: :unprocessable_entity
+          error_message = field_name ? "字段 '#{field_name}' 的值已存在，必须唯一" : "记录包含重复值，违反了唯一约束"
+          render json: { error: error_message }, status: :unprocessable_entity
         else
-          Rails.logger.error "SQL Execution Error: #{e.message}"
-          render json: { errors: [ "创建记录时发生数据库错误" ] }, status: :internal_server_error
+          Rails.logger.error "创建记录时出错: #{e.message}"
+          render json: { error: "创建记录时出错: #{e.message}" }, status: :internal_server_error
         end
-      rescue => e # 捕获其他未知错误
-        Rails.logger.error "Unexpected Error during SQL Execution: #{e.message}"
-        render json: { errors: [ "创建记录时发生未知错误" ] }, status: :internal_server_error
+      rescue => e
+        Rails.logger.error "创建记录时出错: #{e.message}"
+        render json: { error: "创建记录时出错: #{e.message}" }, status: :internal_server_error
       end
     end # 结束 create 方法
 
@@ -354,25 +348,19 @@ module Api
         # 如果没有异常抛出，则认为更新成功
         head :ok # 200 OK 表示成功更新
 
-      rescue ActiveRecord::RecordNotUnique => e
-        Rails.logger.error "Unique constraint violation during update: #{e.message}"
-        # 尝试提取冲突字段名
-        field_name = extract_duplicate_field_from_error(e.message)
-        error_message = field_name ? "更新失败，字段 '#{field_name}' 的值必须唯一。" : "更新失败，记录违反了唯一性约束。"
-        render json: { errors: [ error_message ] }, status: :unprocessable_entity
-      rescue ActiveRecord::StatementInvalid => e
-        # 再次检查是否是唯一性约束错误
-        if e.message.match?(/duplicate entry|unique constraint/i)
+      rescue ActiveRecord::RecordNotUnique, ActiveRecord::StatementInvalid => e
+        # 检查是否是唯一约束错误
+        if e.message.match?(/duplicate entry|unique constraint|violates unique/i)
           field_name = extract_duplicate_field_from_error(e.message)
-          error_message = field_name ? "更新失败，字段 '#{field_name}' 的值必须唯一。" : "更新失败，记录违反了唯一性约束。"
-          render json: { errors: [ error_message ] }, status: :unprocessable_entity
+          error_message = field_name ? "字段 '#{field_name}' 的值已存在，必须唯一" : "记录包含重复值，违反了唯一约束"
+          render json: { error: error_message }, status: :unprocessable_entity
         else
-          Rails.logger.error "SQL Execution Error during update: #{e.message}"
-          render json: { errors: [ "更新记录时发生数据库错误" ] }, status: :internal_server_error
+          Rails.logger.error "创建记录时出错: #{e.message}"
+          render json: { error: "创建记录时出错: #{e.message}" }, status: :internal_server_error
         end
-      rescue => e # 捕获其他未知错误
-        Rails.logger.error "Unexpected Error during update SQL Execution: #{e.message}"
-        render json: { errors: [ "更新记录时发生未知错误" ] }, status: :internal_server_error
+      rescue => e
+        Rails.logger.error "创建记录时出错: #{e.message}"
+        render json: { error: "创建记录时出错: #{e.message}" }, status: :internal_server_error
       end
     end
 
@@ -388,9 +376,38 @@ module Api
     private
 
     def extract_duplicate_field_from_error(message)
-      match = message.match(/key '.*?\.index_.*?_on_(.*?)'/)
-      match ? match[1] : nil
+      # 处理PostgreSQL错误
+      if message.match?(/violates unique constraint/i)
+        # 提取PostgreSQL的约束名称，通常包含字段名
+        match = message.match(/violates unique constraint "([^"]+)"/)
+        if match && match[1]
+          constraint_name = match[1]
+          # 尝试从约束名中提取字段名
+          field_match = constraint_name.match(/index_\w+_on_(\w+)/)
+          return field_match[1] if field_match && field_match[1]
+        end
+      end
+
+      # 处理MySQL错误
+      if message.match?(/Duplicate entry/i)
+        match = message.match(/for key ['\"]([^'\"]+)['\"]/)
+        return match[1].gsub(/^index_\w+_on_/, "") if match && match[1]
+      end
+
+      # 处理SQLite错误
+      if message.match?(/unique constraint failed/i)
+        match = message.match(/constraint failed: (\w+)\.(\w+)/)
+        return match[2] if match && match[2]
+      end
+
+      # 如果无法确定具体字段，返回nil
+      nil
     end
+
+    # def extract_duplicate_field_from_error(message)
+    #   match = message.match(/key '.*?\.index_.*?_on_(.*?)'/)
+    #   match ? match[1] : nil
+    # end
 
     def dynamic_record_file_url(options = {})
       table_id = options[:table_id]

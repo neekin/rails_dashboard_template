@@ -58,7 +58,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_05_04_111514) do
     t.integer "status", default: 0
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
-    t.integer "user_id", null: false
+    t.bigint "user_id", null: false
   end
 
   create_table "dynamic_fields", charset: "utf8mb3", force: :cascade do |t|

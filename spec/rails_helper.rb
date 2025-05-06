@@ -3,7 +3,7 @@ ENV['RAILS_ENV'] ||= 'test'
 require_relative '../config/environment'
 abort("The Rails environment is running in production mode!") if Rails.env.production?
 require 'rspec/rails'
-
+require 'database_cleaner/active_record'
 begin
   ActiveRecord::Migration.maintain_test_schema!
 rescue ActiveRecord::PendingMigrationError => e
@@ -40,15 +40,32 @@ RSpec.configure do |config|
   config.before(:suite) do
     create_test_image
     DatabaseCleaner.clean_with(:truncation)
-
-    adapter = ActiveRecord::Base.connection.adapter_name.downcase
-    strategy = adapter == 'sqlite' ? :truncation : :transaction
-    DatabaseCleaner.strategy = strategy
+    DatabaseCleaner.strategy = :truncation
   end
 
+  # 移除重复的 before(:suite) 块
+
+  # 使用 around 可以确保即使测试失败也会清理
   config.around(:each) do |example|
-    DatabaseCleaner.cleaning do
-      example.run
+    config.around(:each) do |example|
+      DatabaseCleaner.cleaning do
+        # 排除动态表
+        dyn_tables = ActiveRecord::Base.connection.tables.select { |t| t.start_with?('dyn_') }
+        dyn_tables.each { |table| DatabaseCleaner.strategy.instance_variable_get(:@tables_to_clean).delete(table) }
+        example.run
+      end
     end
   end
+
+  # DatabaseCleaner.configure do |config|
+  #   config.before(:each) do
+  #     # 排除动态创建的表
+  #     dyn_tables = ActiveRecord::Base.connection.tables.select { |t| t.start_with?('dyn_') }
+  #     dyn_tables.each do |table|
+  #       DatabaseCleaner.strategy.instance_variable_get(:@tables_to_clean).delete(table)
+  #     end
+  #   end
+  # end
+
+  # 移除单独的 before(:each) 和 after(:each)
 end
