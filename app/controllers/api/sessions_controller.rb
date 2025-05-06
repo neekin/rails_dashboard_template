@@ -1,6 +1,9 @@
 module Api
   class SessionsController < AdminController
+    include Authenticable # Add this
     before_action :authorize_refresh_by_access_request!, only: [ :refresh ]
+    # If using skip_before_action :verify_authenticity_token for API controllers
+    skip_before_action :verify_authenticity_token, raise: false, only: [ :login, :refresh, :logout ], if: -> { request.format.json? }
 
     def login
       user = User.find_by(username: params[:username])
@@ -51,11 +54,16 @@ module Api
     end
 
     def current_user_from_refresh_token
-      token = request.headers["client"]
-      payload = JsonWebToken.decode(token)
-      return unless payload && payload[:refresh]
-
-      User.find_by(id: payload[:user_id])
+      token = request.headers["client"] # Assuming 'client' header holds the refresh token
+      return unless token.present?
+      begin
+        payload = JsonWebToken.decode(token)
+        return unless payload && payload[:refresh] && payload[:user_id]
+        User.find_by(id: payload[:user_id])
+      rescue JWT::DecodeError => e
+        Rails.logger.error "Refresh token decode error: #{e.message}"
+        nil
+      end
     end
 
     def authorize_refresh_by_access_request!

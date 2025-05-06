@@ -361,7 +361,6 @@ class DynamicTableService
       connection.adapter_name.casecmp("sqlite").zero?
     end
 
-    private
 
     # --- SQLite 特定操作 ---
 
@@ -436,8 +435,22 @@ class DynamicTableService
     def add_unique_index(table_name, column_name)
       index_name = generate_index_name(table_name, column_name)
       Rails.logger.info "为字段 #{column_name} 添加唯一索引 #{index_name}"
-      # 这个调用会直接操作数据库，如果失败会抛出异常
+
+      # 检查是否有重复数据
+      duplicate_check_sql = "SELECT COUNT(*) as count FROM (SELECT #{column_name} FROM #{table_name} GROUP BY #{column_name} HAVING COUNT(*) > 1 AND #{column_name} IS NOT NULL) as duplicates"
+      duplicates = connection.select_one(duplicate_check_sql)
+
+      if duplicates && duplicates["count"].to_i > 0
+        return { success: false, error: "无法添加唯一约束，因为列 '#{column_name}' 中存在重复值。" }
+      end
+
+      # 添加唯一索引
       connection.add_index(table_name, column_name, unique: true, name: index_name)
+      { success: true }
+    rescue ActiveRecord::RecordNotUnique => e
+      { success: false, error: "无法添加唯一约束，因为列 '#{column_name}' 中存在重复值。" }
+    rescue => e
+      { success: false, error: "添加唯一索引失败: #{e.message}" }
    end
 
    def remove_unique_index(table_name, column_name)
@@ -448,16 +461,22 @@ class DynamicTableService
         Rails.logger.info "删除字段 #{column_name} 的唯一索引 #{index_name}"
         # 这个调用会直接操作数据库，如果失败会抛出异常
         connection.remove_index(table_name, name: index_name)
+        { success: true }
       # 如果按名称找不到，尝试按列名移除 (作为备选，可能不精确)
       elsif index_exists?(table_name, column_name, unique: true)
          Rails.logger.warn "未找到名为 #{index_name} 的唯一索引，尝试按列 #{column_name} 删除唯一索引"
          # 这个调用也可能失败
-         connection.remove_index(table_name, column: column_name, unique: true) # 注意: unique 选项在 remove_index 中可能不被所有适配器支持或需要
+         connection.remove_index(table_name, column: column_name)
+         { success: true }
       else
          # 如果两种方式都找不到，记录警告，但不抛异常
          Rails.logger.warn "未找到字段 #{column_name} 的唯一索引（名称: #{index_name}），跳过删除"
-        # 注意：这里没有返回 false 或抛异常，依赖于 change_field_unique_constraint 中的逻辑
+         # 如果索引不存在，也算成功
+         { success: true }
       end
+   rescue => e
+      Rails.logger.error "删除唯一索引失败: #{e.message}"
+      { success: false, error: "删除唯一索引失败: #{e.message}" }
    end
 
   def generate_index_name(table_name, column_name)

@@ -16,7 +16,12 @@ module Api
 
       # 构建基础查询
       # 构建基础查询，仅限当前用户的 AppEntity
-      entities = current_user.app_entities
+      if current_user.admin?
+        entities = AppEntity.all
+      else
+        entities = current_user.app_entities
+      end
+
 
       # 动态构建查询条件
       filters.each do |key, value|

@@ -34,15 +34,15 @@ RSpec.describe DynamicTableHelper, type: :helper do
 
   describe "#determine_default_value" do
     it "返回正确的默认值" do
-      expect(helper.determine_default_value("string")).to eq("默认值")
-      expect(helper.determine_default_value("integer")).to eq(0)
-      expect(helper.determine_default_value("boolean")).to eq(false)
-      expect(helper.determine_default_value("text")).to eq("默认文本")
-      expect(helper.determine_default_value("date")).to be_a(Date)
-      expect(helper.determine_default_value("datetime")).to be_a(Time)
-      expect(helper.determine_default_value("decimal")).to eq(0.0)
-      expect(helper.determine_default_value("float")).to eq(0.0)
-      expect(helper.determine_default_value("unknown")).to be_nil
+      expect(helper.determine_default_value("string", "默认值")).to eq("默认值")
+      expect(helper.determine_default_value("integer", 0)).to eq(0)
+      expect(helper.determine_default_value("boolean", false)).to eq(false)
+      expect(helper.determine_default_value("text", "默认文本")).to eq("默认文本")
+      expect(helper.determine_default_value("date", Date.today)).to be_a(Date)
+      expect(helper.determine_default_value("datetime", Time.now)).to be_a(Time)
+      expect(helper.determine_default_value("decimal", 0.0)).to eq(0.0)
+      expect(helper.determine_default_value("float", 0.0)).to eq(0.0)
+      expect(helper.determine_default_value("unknown", nil)).to be_nil
     end
   end
 end

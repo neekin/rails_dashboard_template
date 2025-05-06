@@ -1,6 +1,7 @@
 import React from 'react';
 import { Outlet, Navigate } from 'react-router';
 import { useAuth } from '@/lib/hooks/useAuth';
+import '@ant-design/v5-patch-for-react-19';
 
 function ProtectedRoute() {
   const { user, loading } = useAuth();

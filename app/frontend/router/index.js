@@ -9,7 +9,13 @@ import DynamicTablePage from "@/pages/DynamicTablePage";
 import DynamicFieldPage from "@/pages/DynamicFieldPage";
 import DynamicDataPage from "@/pages/DynamicDataPage";
 import AppEntityPage from "@/pages/AppEntityPage";
+import OAuthCallbackPage from '@/pages/OauthCallbackPage';
+import IndexPage from "@/pages/IndexPage";
 const router = createBrowserRouter([
+  {
+    path: "/",
+    element: <IndexPage />,
+  },
   {
     path: "/admin",
     element: <ProtectedRoute />, // 受保护的路由
@@ -44,7 +50,7 @@ const router = createBrowserRouter([
     path: "/login",
     element: <LoginPage />,
   },
-
+  { path: "/oauth-callback", element: <OAuthCallbackPage /> },
   {
     path: "/login1",
     element: <LoginPage />,

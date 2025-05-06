@@ -3,7 +3,7 @@ ENV['RAILS_ENV'] ||= 'test'
 require_relative '../config/environment'
 abort("The Rails environment is running in production mode!") if Rails.env.production?
 require 'rspec/rails'
-
+require 'database_cleaner/active_record'
 begin
   ActiveRecord::Migration.maintain_test_schema!
 rescue ActiveRecord::PendingMigrationError => e
@@ -33,22 +33,24 @@ end
 
 RSpec.configure do |config|
   config.fixture_paths = [ Rails.root.join('spec/fixtures') ]
+  # 禁用默认的事务性固件
   config.use_transactional_fixtures = false
 
   config.filter_rails_from_backtrace!
 
   config.before(:suite) do
     create_test_image
+    # 在测试套件开始前清理所有表
     DatabaseCleaner.clean_with(:truncation)
-
-    adapter = ActiveRecord::Base.connection.adapter_name.downcase
-    strategy = adapter == 'sqlite' ? :truncation : :transaction
-    DatabaseCleaner.strategy = strategy
   end
 
-  config.around(:each) do |example|
-    DatabaseCleaner.cleaning do
-      example.run
-    end
+  config.before(:each) do
+    # 对所有测试使用截断策略而不是事务，避免 SAVEPOINT 问题
+    DatabaseCleaner.strategy = :truncation
+    DatabaseCleaner.start
+  end
+
+  config.after(:each) do
+    DatabaseCleaner.clean
   end
 end

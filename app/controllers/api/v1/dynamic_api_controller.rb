@@ -1,4 +1,3 @@
-require "net/http"
 module Api
   module V1
     class DynamicApiController < ApiController
@@ -8,30 +7,24 @@ module Api
       before_action :find_table_by_identifier
       before_action :find_record, only: [ :show, :update, :destroy ]
       # 跳过 `authorize_app_entity!` 和 `find_table_by_identifier` 对 `serve_file` 方法的拦截
-      skip_before_action :authorize_app_entity!, only: [ :serve_file ]
-      skip_before_action :find_table_by_identifier, only: [ :serve_file ]
+      # skip_before_action :authorize_app_entity!, only: [ :serve_file ]
+      # skip_before_action :find_table_by_identifier, only: [ :serve_file ]
       def trigger_webhook(event, payload)
         webhook_url = @table.webhook_url # 假设每个 AppEntity 都有一个 webhook_url 字段
         return unless webhook_url.present?
 
-        begin
-          uri = URI(webhook_url)
-          http = Net::HTTP.new(uri.host, uri.port)
-          http.use_ssl = (uri.scheme == "https")
-          request = Net::HTTP::Post.new(uri.path, { "Content-Type" => "application/json" })
-          request.body = { event: event, payload: payload }.to_json
-          response = http.request(request)
-
-          Rails.logger.info "Webhook triggered for event '#{event}': #{response.body}"
-        rescue => e
-          Rails.logger.error "Error triggering webhook for event '#{event}': #{e.message}"
-        end
+        # 将实际的 webhook 调用移至后台作业
+        WebhookJob.perform_later(webhook_url, event, payload.as_json) # 使用 as_json 确保 payload 是可序列化的
+        Rails.logger.info "Webhook job enqueued for event '#{event}' to '#{webhook_url}'"
+      rescue StandardError => e
+        Rails.logger.error "Error enqueuing webhook job for event '#{event}': #{e.message}"
       end
 
       def serve_file
         app_id = params[:appId] # 从 URL 参数中获取 appId
         identifier = params[:identifier] # 从 URL 参数中获取表格标识符
-        field_name = params[:field_name].to_s.split("/").first # 从 URL 参数中获取字段名称
+        field_name = params[:field_name] # 从 URL 参数中获取字段名称
+
         # 验证 appId 是否有效
         @app_entity = AppEntity.find_by(id: app_id)
         unless @app_entity
@@ -40,8 +33,9 @@ module Api
         end
 
         # 查找表格
-        @table = @app_entity.dynamic_tables.find_by(api_identifier: identifier) ||
-                 @app_entity.dynamic_tables.find_by("LOWER(table_name) = ?", identifier.downcase)
+        @table = DynamicTable.find_by(api_identifier: identifier, app_entity_id: @app_entity.id) ||
+                 DynamicTable.find_by(id: identifier, app_entity_id: @app_entity.id)
+
         unless @table
           render json: { error: "找不到表格: #{identifier}" }, status: :not_found
           return
@@ -63,40 +57,91 @@ module Api
 
         signed_id = @record.send(field_name)
         unless signed_id.present?
-          render json: { error: "记录 ##{@record.id} 没有字段 '#{field_name}' 的文件" }, status: :not_found
+          render json: { error: "记录 ##{params[:id]} 没有字段 '#{field_name}' 的文件" }, status: :not_found
           return
         end
 
         # 查找 Active Storage Blob
         begin
-          blob = ActiveStorage::Blob.find_signed!(signed_id)
-        rescue ActiveSupport::MessageVerifier::InvalidSignature, ActiveRecord::RecordNotFound
-          render json: { error: "无法找到或验证文件" }, status: :not_found
-          return
-        end
+          blob = ActiveStorage::Blob.find_signed(signed_id)
+          # 配置头信息
+          response.headers["Content-Type"] = blob.content_type
+          response.headers["Content-Disposition"] = ActionDispatch::Http::ContentDisposition.format(
+            disposition: params[:disposition] || "inline",
+            filename: blob.filename.to_s
+          )
 
-        # 根据配置文件和存储服务类型决定服务方式
-        begin
-          is_s3_service = defined?(ActiveStorage::Service::S3Service) && blob.service.is_a?(ActiveStorage::Service::S3Service)
-
-          if Rails.application.config.x.file_serving_strategy == :redirect && is_s3_service
-            expires_in = 10.minutes
-            disposition_param = params[:disposition] == "attachment" ? :attachment : :inline
-            redirect_url = blob.url(expires_in: expires_in, disposition: disposition_param)
-            redirect_to redirect_url, allow_other_host: true, status: :found
+          # 对于不同存储服务的处理
+          if Rails.application.config.active_storage.service == :local
+            # 本地存储
+            path = ActiveStorage::Blob.service.send(:path_for, blob.key)
+            send_file path, disposition: params[:disposition] || "inline"
           else
-            data = blob.download
-            disposition_param = params[:disposition] == "attachment" ? "attachment" : "inline"
-            send_data data,
-                      filename: blob.filename.to_s,
-                      content_type: blob.content_type,
-                      disposition: disposition_param
+            # 远程存储(S3, GCS等)
+            redirect_to blob.service_url(disposition: params[:disposition])
           end
+        rescue ActiveSupport::MessageVerifier::InvalidSignature, ActiveRecord::RecordNotFound
+          render json: { error: "无效或过期的文件引用" }, status: :not_found
+          nil
         rescue ActiveStorage::FileNotFoundError
-          render json: { error: "文件在存储服务中未找到" }, status: :not_found
+          render json: { error: "找不到文件" }, status: :not_found
         rescue => e
-          Rails.logger.error "Error serving file blob #{blob.key}: #{e.message}\n#{e.backtrace.join("\n")}"
-          render json: { error: "无法提供文件" }, status: :internal_server_error
+          Rails.logger.error "serve_file错误: #{e.message}\n#{e.backtrace.join("\n")}"
+          render json: { error: "处理文件时出错: #{e.message}" }, status: :internal_server_error
+        end
+      end
+
+      # 处理文件字段
+      def handle_file_fields(record, file_params_hash)
+        return unless file_params_hash && file_params_hash.keys.any?
+
+        file_params_hash.each do |field_name, file_param|
+          if file_param.blank? && record.respond_to?(field_name) && record.send(field_name).present?
+            # 如果参数为空但记录中有文件，则删除文件
+            begin
+              if DynamicTableService.postgresql?
+                # PostgreSQL需要引用字段名
+                ActiveRecord::Base.connection.execute(
+                  "UPDATE dyn_#{@table.id} SET #{DynamicTableService.quote_identifier(field_name)} = NULL WHERE id = #{record.id}"
+                )
+              else
+                # MySQL和SQLite
+                ActiveRecord::Base.connection.execute(
+                  "UPDATE dyn_#{@table.id} SET #{field_name} = NULL WHERE id = #{record.id}"
+                )
+              end
+            rescue => e
+              Rails.logger.error "清除文件字段失败: #{e.message}"
+            end
+          elsif file_param.present?
+            # 如果有新文件，保存并更新记录
+            begin
+              # 处理文件上传...
+              blob = ActiveStorage::Blob.create_and_upload!(
+                io: file_param.open,
+                filename: file_param.original_filename,
+                content_type: file_param.content_type
+              )
+
+              # 保存文件的signed_id到数据库字段
+              signed_id = blob.signed_id
+
+              if DynamicTableService.postgresql?
+                # PostgreSQL需要引用字段名
+                ActiveRecord::Base.connection.execute(
+                  "UPDATE dyn_#{@table.id} SET #{DynamicTableService.quote_identifier(field_name)} = '#{signed_id}' WHERE id = #{record.id}"
+                )
+              else
+                # MySQL和SQLite
+                ActiveRecord::Base.connection.execute(
+                  "UPDATE dyn_#{@table.id} SET #{field_name} = '#{signed_id}' WHERE id = #{record.id}"
+                )
+              end
+            rescue => e
+              Rails.logger.error "上传文件失败: #{e.message}"
+              raise e
+            end
+          end
         end
       end
       # GET /api/v1/:identifier

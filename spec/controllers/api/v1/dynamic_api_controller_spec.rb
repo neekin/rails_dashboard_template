@@ -5,10 +5,11 @@ RSpec.describe Api::V1::DynamicApiController, type: :controller do
   include DynamicTableHelper
   include ActionDispatch::TestProcess
 
-  before(:all) do
-    # 创建一个默认用户
+  before(:each) do
+    # 创建一个默认用户，确保用户名和邮箱唯一
     @user = User.create!(
-      username: 'test_user',
+      username: "test_user_#{SecureRandom.hex(4)}",
+      email: "test_user_#{SecureRandom.hex(4)}@example.com",
       password: 'password123',
       password_confirmation: 'password123'
     )
@@ -21,11 +22,11 @@ RSpec.describe Api::V1::DynamicApiController, type: :controller do
       user_id: @user.id
     )
 
-    # 创建API密钥
+    # 创建API密钥，确保 API 密钥唯一
     @api_key = ApiKey.create!(
       remark: '测试API密钥',
-      apikey: 'test_api_key',
-      apisecret: 'test_api_secret',
+      apikey: "test_api_key_#{SecureRandom.hex(8)}",
+      apisecret: "test_api_secret_#{SecureRandom.hex(8)}",
       app_entity_id: @app_entity.id,
       active: true
     )
