@@ -2,6 +2,7 @@ module Api
   class DynamicFieldsController < AdminController
     before_action :validate_user_ownership!, only: [ :index, :create ]
     before_action :set_dynamic_table, only: [ :index, :create ]
+    before_action :authorize_access_request!
 
     def index
       fields = @dynamic_table.dynamic_fields

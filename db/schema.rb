@@ -77,7 +77,7 @@ ActiveRecord::Schema[8.0].define(version: 2025_05_04_111514) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.string "api_identifier"
-    t.integer "app_entity_id", null: false
+    t.bigint "app_entity_id", null: false
     t.string "webhook_url"
     t.index ["api_identifier"], name: "index_dynamic_tables_on_api_identifier", unique: true
   end
