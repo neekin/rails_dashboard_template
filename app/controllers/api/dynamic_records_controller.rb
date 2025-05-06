@@ -1,6 +1,8 @@
 module Api
   class DynamicRecordsController < AdminController
     before_action :validate_user_ownership!, only: [ :index, :create, :update, :destroy ]
+    before_action :authorize_access_request!
+    skip_before_action before_action :authorize_access_request!, only: [ :serve_file ]
     def serve_file
       table = DynamicTable.find(params[:dynamic_table_id])
       record_id = params[:id]

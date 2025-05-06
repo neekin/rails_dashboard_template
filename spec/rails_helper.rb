@@ -47,25 +47,8 @@ RSpec.configure do |config|
 
   # 使用 around 可以确保即使测试失败也会清理
   config.around(:each) do |example|
-    config.around(:each) do |example|
-      DatabaseCleaner.cleaning do
-        # 排除动态表
-        dyn_tables = ActiveRecord::Base.connection.tables.select { |t| t.start_with?('dyn_') }
-        dyn_tables.each { |table| DatabaseCleaner.strategy.instance_variable_get(:@tables_to_clean).delete(table) }
-        example.run
-      end
-    end
+    DatabaseCleaner.start
+    example.run
+    DatabaseCleaner.clean
   end
-
-  # DatabaseCleaner.configure do |config|
-  #   config.before(:each) do
-  #     # 排除动态创建的表
-  #     dyn_tables = ActiveRecord::Base.connection.tables.select { |t| t.start_with?('dyn_') }
-  #     dyn_tables.each do |table|
-  #       DatabaseCleaner.strategy.instance_variable_get(:@tables_to_clean).delete(table)
-  #     end
-  #   end
-  # end
-
-  # 移除单独的 before(:each) 和 after(:each)
 end
