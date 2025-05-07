@@ -5,7 +5,7 @@ RSpec.describe Api::V1::DynamicApiController, type: :controller do
   include DynamicTableHelper
   include ActionDispatch::TestProcess
 
-  before(:all) do
+  before(:each) do
     # 创建一个默认用户
     @user = User.create!(
       username: 'test_user',

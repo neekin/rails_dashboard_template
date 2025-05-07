@@ -1,0 +1,123 @@
+require "openssl"
+require "httparty"
+
+class TriggerWebhookJob < ApplicationJob
+  queue_as :webhooks # 您可以根据需要更改队列名称
+
+  # ActiveJob 默认的重试机制会被 SolidQueue 接管
+  # 您可以在这里定义特定的重试策略，例如：
+  # retry_on StandardError, wait: :exponentially_longer, attempts: 5
+  # discard_on ActiveRecord::RecordNotFound # 如果 WebhookSetting 被删除，则不重试
+
+  # @param webhook_setting_id [Integer] WebhookSetting 记录的 ID
+  # @param event_type [String] 事件类型, 例如 "record.created", "record.updated"
+  # @param data_payload [Hash] 要发送的实际数据
+  # @param record_id [Integer, nil] 触发此 webhook 的记录 ID (可选, 用于日志/追踪)
+  # @param dynamic_table_id [Integer, nil] 相关的 DynamicTable ID (可选, 用于上下文)
+  def perform(webhook_setting_id, event_type, data_payload, record_id = nil, dynamic_table_id = nil)
+    webhook_setting = WebhookSetting.find_by(id: webhook_setting_id)
+
+    unless webhook_setting
+      Rails.logger.warn "[TriggerWebhookJob] WebhookSetting with ID #{webhook_setting_id} not found. Aborting."
+      return # Webhook 配置不存在，中止任务
+    end
+
+    unless webhook_setting.active? && webhook_setting.subscribes_to_event?(event_type)
+      Rails.logger.info "[TriggerWebhookJob] WebhookSetting ID #{webhook_setting_id} (URL: #{webhook_setting.url}) is inactive or does not subscribe to event '#{event_type}'. Skipping."
+      return
+    end
+
+    url = webhook_setting.url
+    secret = webhook_setting.secret # 用于签名 payload
+
+    headers = {
+      "Content-Type" => "application/json",
+      "User-Agent" => "RailsWebhookClient/1.0 (AppEntityID: #{webhook_setting.app_entity_id})", # 示例 User-Agent
+      "X-Webhook-Event" => event_type,
+      "X-Webhook-Attempt" => (executions + 1).to_s, # `executions` 由 SolidQueue (或 ActiveJob 适配器) 提供
+      "X-Webhook-Delivery-ID" => SecureRandom.uuid # 为每次尝试生成唯一ID
+    }
+
+    # 准备最终的 payload
+    final_payload = {
+      event: event_type,
+      triggered_at: Time.current.iso8601,
+      data: data_payload,
+      delivery_id: headers["X-Webhook-Delivery-ID"]
+    }
+    final_payload[:record_id] = record_id if record_id
+    final_payload[:dynamic_table_id] = dynamic_table_id if dynamic_table_id
+
+    # 如果存在密钥，则对 payload 进行签名 (HMAC-SHA256 是常见的选择)
+    if secret.present?
+      signature_payload = final_payload.to_json
+      signature = OpenSSL::HMAC.hexdigest(OpenSSL::Digest.new("sha256"), secret, signature_payload)
+      headers["X-Webhook-Signature-256"] = "sha256=#{signature}" # 或者您偏好的签名头名称
+    end
+
+    log_prefix = "[TriggerWebhookJob][SettingID: #{webhook_setting.id}][Event: #{event_type}][URL: #{url}]"
+    Rails.logger.info "#{log_prefix} Sending webhook. Attempt: #{executions + 1}. Payload keys: #{final_payload.keys.join(', ')}"
+
+    delivery_log_attributes = {
+      webhook_setting: webhook_setting,
+      event_type: event_type,
+      payload_sent: final_payload,
+      request_headers: headers,
+      record_id: record_id,
+      dynamic_table_id: dynamic_table_id,
+      attempt_number: executions + 1
+    }
+    delivery_log = WebhookDeliveryLog.create(delivery_log_attributes.merge(status: :pending, sent_at: Time.current))
+
+
+    begin
+      response = HTTParty.post(
+        url,
+        body: final_payload.to_json,
+        headers: headers,
+        timeout: webhook_setting.timeout_seconds.presence || 15 # 从配置读取超时或使用默认值
+      )
+
+      delivery_log.update!(
+        response_code: response.code,
+        response_headers: response.headers.to_h,
+        response_body: response.body.to_s.truncate(5000), # 截断以避免过大的日志
+        status: response.success? ? :succeeded : :failed,
+        delivered_at: Time.current
+      )
+
+      if response.success?
+        Rails.logger.info "#{log_prefix} Webhook sent successfully. Status: #{response.code}."
+      else
+        Rails.logger.error "#{log_prefix} Failed to send webhook. Status: #{response.code}. Body: #{response.body.to_s.truncate(200)}"
+        # 对于服务端错误 (5xx) 或某些客户端错误 (如 429 Too Many Requests)，可以触发重试
+        # 对于其他 4xx 错误，可能不应重试
+        if response.server_error? || response.code == 429
+          raise "WebhookFailedError: HTTP #{response.code}" # 触发 ActiveJob 重试
+        else
+          # 对于 4xx 错误（非429），通常不重试，记录为永久失败
+          Rails.logger.warn "#{log_prefix} Non-retryable client error HTTP #{response.code}. Marking as failed."
+        end
+      end
+
+    rescue Net::OpenTimeout, Net::ReadTimeout, SocketError, Errno::ECONNREFUSED, HTTParty::Error => e
+      error_message = "Network/HTTParty error: #{e.class} - #{e.message}"
+      Rails.logger.error "#{log_prefix} #{error_message}"
+      delivery_log.update!(
+        status: :failed,
+        error_message: error_message,
+        delivered_at: Time.current
+      )
+      raise e # 重新抛出异常，让 ActiveJob/SolidQueue 处理重试
+    rescue StandardError => e
+      error_message = "Unexpected error: #{e.class} - #{e.message}"
+      Rails.logger.error "#{log_prefix} #{error_message}\nBacktrace:\n#{e.backtrace.join("\n")}"
+      delivery_log.update!(
+        status: :failed,
+        error_message: error_message.truncate(1000),
+        delivered_at: Time.current
+      )
+      raise e # 重新抛出异常
+    end
+  end
+end
