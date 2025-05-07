@@ -27,7 +27,8 @@ class AdminController < ActionController::API
     {
       id: user.id,
       username: user.username,
-      email: user.email
+      email: user.email,
+      avatar_url: user.avatar_url
     }
   end
   # 校验当前用户是否拥有指定的 AppEntity 和 DynamicTable

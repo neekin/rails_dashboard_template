@@ -29,6 +29,7 @@ Rails.application.routes.draw do
       put "/:identifier/:id", to: "dynamic_api#update"
       patch "/:identifier/:id", to: "dynamic_api#update"
       delete "/:identifier/:id", to: "dynamic_api#destroy"
+
       # resources :identifier, controller: "dynamic_api", path: ":identifier", only: [ :index, :show, :create, :update, :destroy ] do
       #     member do
       #               get "files/:field_name", to: "dynamic_api#serve_file"
@@ -36,7 +37,11 @@ Rails.application.routes.draw do
       #     end
       # end
     end
+    get "/me", to: "me#show"
   end
+  get "/auth/:provider/callback", to: "api/omniauth_callbacks#callback"
+  get "/auth/failure", to: "api/omniauth_callbacks#failure" # OmniAuth default failure route
+  post "/auth/:provider/callback", to: "api/omniauth_callbacks#callback" # Some providers might POST
   root "pages#home"
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 

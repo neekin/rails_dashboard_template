@@ -326,7 +326,7 @@ export default () => {
               collapsedShowGroupTitle: true,
             }}
             avatarProps={{
-              src: "https://gw.alipayobjects.com/zos/antfincdn/efFD%24IOql2/weixintupian_20170331104822.jpg",
+              src: `${user.avatar_url}`||"https://gw.alipayobjects.com/zos/antfincdn/efFD%24IOql2/weixintupian_20170331104822.jpg",
               size: "small",
               title: `${user.username}`,
               render: (props, dom) => {

@@ -65,3 +65,7 @@ gem "rack-cors"
 gem "aws-sdk-s3"
 
 gem "mysql2"
+
+gem "omniauth"
+gem "omniauth-github"
+gem "omniauth-google-oauth2"

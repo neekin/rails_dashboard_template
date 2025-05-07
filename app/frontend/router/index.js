@@ -9,6 +9,7 @@ import DynamicTablePage from "@/pages/DynamicTablePage";
 import DynamicFieldPage from "@/pages/DynamicFieldPage";
 import DynamicDataPage from "@/pages/DynamicDataPage";
 import AppEntityPage from "@/pages/AppEntityPage";
+import OAuthCallbackPage from '@/pages/OauthCallbackPage';
 const router = createBrowserRouter([
   {
     path: "/admin",
@@ -44,7 +45,7 @@ const router = createBrowserRouter([
     path: "/login",
     element: <LoginPage />,
   },
-
+  { path: "/oauth-callback", element: <OAuthCallbackPage /> },
   {
     path: "/login1",
     element: <LoginPage />,

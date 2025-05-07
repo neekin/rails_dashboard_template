@@ -5,7 +5,7 @@ import {
   TaobaoOutlined,
   UserOutlined,
   WeiboOutlined,
-  WechatFilled,
+  WechatFilled, GithubOutlined, GoogleOutlined 
 } from '@ant-design/icons';
 import {
   LoginFormPage,
@@ -65,6 +65,15 @@ const Page = () => {
       message.error(err.message || '登录失败，请稍后再试');
     }
   };
+  const handleGitHubLogin = () => {
+    // Redirect to backend's GitHub auth initiation URL
+    window.location.href = '/auth/github'; // Ensure your Rails app handles this route
+  };
+
+  const handleGoogleLogin = () => {
+    // Redirect to backend's Google auth initiation URL
+    window.location.href = '/auth/google_oauth2'; // Ensure your Rails app handles this route
+  };
   return (
     <div
       style={{
@@ -116,7 +125,7 @@ const Page = () => {
               flexDirection: 'column',
             }}
           >
-            {/* <Divider plain>
+            <Divider plain>
               <span
                 style={{
                   color: token.colorTextPlaceholder,
@@ -127,50 +136,25 @@ const Page = () => {
                 其他登录方式
               </span>
             </Divider>
-            <Space align="center" size={24}>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  flexDirection: 'column',
-                  height: 40,
-                  width: 40,
-                  border: '1px solid ' + token.colorPrimaryBorder,
-                  borderRadius: '50%',
-                }}
+            <Space direction="vertical" style={{ width: '100%', alignItems: 'center', marginTop: 8 }}>
+              <Button
+                icon={<GithubOutlined />}
+                onClick={handleGitHubLogin}
+                block
+                size="large"
               >
-                <AlipayOutlined style={{ ...iconStyles, color: '#1677FF' }} />
-              </div>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  flexDirection: 'column',
-                  height: 40,
-                  width: 40,
-                  border: '1px solid ' + token.colorPrimaryBorder,
-                  borderRadius: '50%',
-                }}
+                使用 GitHub 登录
+              </Button>
+              <Button
+                icon={<GoogleOutlined />}
+                onClick={handleGoogleLogin}
+                block
+                size="large"
+                style={{ marginTop: 8 }}
               >
-                <TaobaoOutlined style={{ ...iconStyles, color: '#FF6A10' }} />
-              </div>
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  flexDirection: 'column',
-                  height: 40,
-                  width: 40,
-                  border: '1px solid ' + token.colorPrimaryBorder,
-                  borderRadius: '50%',
-                }}
-              >
-                <WeiboOutlined style={{ ...iconStyles, color: '#1890ff' }} />
-              </div>
-            </Space> */}
+                使用 Google 登录
+              </Button>
+            </Space>
           </div>
         }
       >
