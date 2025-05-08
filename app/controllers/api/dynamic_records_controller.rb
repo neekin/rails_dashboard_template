@@ -1,8 +1,8 @@
 module Api
   class DynamicRecordsController < AdminController
-    before_action :validate_user_ownership!, only: [ :index, :create, :update, :destroy ]
+    before_action :set_dynamic_table_and_authorize_access!, only: [ :index, :create, :update, :destroy ]
     before_action :authorize_access_request!
-    skip_before_action :authorize_access_request!, only: [ :serve_file ]
+    skip_before_action :authorize_access_request!, only: [ :serve_file ] # 保持不变，serve_file的权限独立处理
     def serve_file
       table = DynamicTable.find(params[:dynamic_table_id])
       record_id = params[:id]
@@ -376,6 +376,19 @@ module Api
     end
 
     private
+
+    def set_dynamic_table_and_authorize_access!
+      @dynamic_table = DynamicTable.find_by(id: params[:dynamic_table_id])
+      unless @dynamic_table
+        render json: { error: "表格不存在" }, status: :not_found and return
+      end
+
+      return if current_user.admin? # 管理员可以访问任何表的数据
+
+      unless @dynamic_table.app_entity.user_id == current_user.id
+        render json: { error: "您无权操作此表格的数据" }, status: :forbidden and return
+      end
+    end
 
     def extract_duplicate_field_from_error(message)
       # 处理PostgreSQL错误

@@ -1,7 +1,10 @@
 module Api
   class DynamicTablesController < AdminController
-    before_action :authorize_app_entity!, only: [ :index, :create, :update, :destroy ]
     before_action :authorize_access_request!
+
+    before_action :set_and_authorize_target_app_entity_for_index_create, only: [ :index, :create ]
+    before_action :set_and_authorize_dynamic_table_and_app_entity, only: [ :show, :update, :destroy ]
+
     # GET /api/dynamic_tables
     def index
       # 获取查询参数
@@ -13,7 +16,7 @@ module Api
       filters = JSON.parse(query_params["query"] || "{}").except("current", "pageSize")
 
       # 构建基础查询
-      tables = DynamicTable.all
+      tables = @app_entity.dynamic_tables
       # 根据 appId 过滤表格
       if query_params["appId"].present?
         tables = tables.where(app_entity_id: query_params["appId"])
@@ -295,31 +298,39 @@ module Api
 
     private
 
-    def authorize_app_entity!
-      # 尝试从不同参数获取 app_entity_id
-      # app_entity_id = params[:app_entity_id] || params[:app_entity] || params[:appId]
-      app_entity_id = params[:app_entity_id] || params[:app_entity] || params[:appId]
-      # 如果是通过 :id 访问单个表（show, update, destroy），则从表中获取 app_entity_id
-      if params[:id].present? && controller_name == "dynamic_tables" && %w[show update destroy].include?(action_name)
-        table_for_auth = DynamicTable.find_by(id: params[:id])
-        app_entity_id ||= table_for_auth&.app_entity_id
+    def set_and_authorize_target_app_entity_for_index_create
+      app_entity_id_param = params[:app_entity_id] || params[:app_entity] || params[:appId]
+
+      if app_entity_id_param.present?
+        @app_entity = AppEntity.find_by(id: app_entity_id_param)
+        unless @app_entity
+          render json: { error: "指定应用不存在" }, status: :not_found and return
+        end
+
+        unless current_user.admin? || @app_entity.user_id == current_user.id
+          render json: { error: "您无权操作此应用" }, status: :forbidden and return
+        end
+      elsif action_name == "create" # 创建时必须提供 appId
+        render json: { error: "创建表格需要提供应用ID (appId)" }, status: :unprocessable_entity and return
+      else # index 且无 appId
+        @app_entity = nil # 管理员将查询所有，普通用户将查询其拥有的
+      end
+    end
+
+    def set_and_authorize_dynamic_table_and_app_entity
+      @dynamic_table = DynamicTable.find_by(id: params[:id])
+      unless @dynamic_table
+        render json: { error: "表格不存在" }, status: :not_found and return
       end
 
-      # 检查 app_entity 是否存在
-      app_entity = AppEntity.find_by(id: app_entity_id)
-      unless app_entity
-        render json: { error: "非法应用或应用不存在" }, status: :unprocessable_entity
-        return
+      @app_entity = @dynamic_table.app_entity
+      unless @app_entity
+        render json: { error: "表格未关联到任何应用" }, status: :internal_server_error and return # 数据不一致
       end
 
-      # 检查当前用户是否有权限操作该 AppEntity
-      unless app_entity.user_id == current_user.id
-        render json: { error: "您无权操作此应用" }, status: :forbidden
-        return
+      unless current_user.admin? || @app_entity.user_id == current_user.id
+        render json: { error: "您无权操作此表格" }, status: :forbidden and return
       end
-
-      # 设置实例变量供后续方法使用
-      @app_entity = app_entity
     end
   end
 end

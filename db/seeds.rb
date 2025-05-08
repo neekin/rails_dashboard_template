@@ -14,7 +14,8 @@ User.destroy_all
 
 # 创建种子用户
 users = User.create!([
-  { username: "admin", email: "neekin@example.com", password: "password" }
+  { username: "admin", email: "admin@example.com", password: "password", role: :admin, level: :free },
+  { username: "neekin1", email: "neekin1@example.com", password: "password", role: :user, level: :free }
 ])
 
 puts "Seeded #{User.count} users."

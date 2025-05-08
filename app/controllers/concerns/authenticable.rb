@@ -27,7 +27,9 @@ module Authenticable
       username: user.username,
       email: user.email,
       name: user.name,
-      avatar_url: user.avatar_url
+      avatar_url: user.avatar_url,
+      role: user.role, # 会返回 "user" 或 "admin"
+      level: user.level  # 会返回 "free", "premium" 等
       # Add other relevant user fields
     }
   end

@@ -28,7 +28,7 @@ import {
 import React, { useState } from "react";
 import { useOutletContext, Outlet, useNavigate } from "react-router";
 import defaultProps from "./_defaultProps";
-
+import 'antd/dist/reset.css';
 // const Item = (props) => {
 //     const { token } = theme.useToken();
 //     return (

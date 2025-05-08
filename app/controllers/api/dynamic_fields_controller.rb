@@ -1,7 +1,8 @@
 module Api
   class DynamicFieldsController < AdminController
-    before_action :validate_user_ownership!, only: [ :index, :create ]
     before_action :set_dynamic_table, only: [ :index, :create ]
+    before_action :validate_user_ownership!
+    # before_action :authorize_table_access!, only: [ :index, :create ]
     before_action :authorize_access_request!
 
     def index
@@ -70,9 +71,10 @@ module Api
     private
 
     def set_dynamic_table
-      @dynamic_table = DynamicTable.find(params[:dynamic_table_id])
-    rescue ActiveRecord::RecordNotFound
-      render json: { error: "指定的动态表未找到" }, status: :not_found
+      @dynamic_table = DynamicTable.find_by(id: params[:dynamic_table_id])
+      unless @dynamic_table
+        render json: { error: "指定的动态表未找到" }, status: :not_found and return # 确保停止执行
+      end
     end
 
     def create_new_field(field, dynamic_table, updated_or_created_fields)

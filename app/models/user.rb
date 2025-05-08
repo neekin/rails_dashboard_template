@@ -1,10 +1,18 @@
 class User < ApplicationRecord
   has_secure_password
   has_many :app_entities, dependent: :destroy
+  # 0: user, 1: admin
+  enum :role, { user: 0, admin: 1 }
+  enum :level, { free: 0, premium: 1, professional: 2, enterprise: 3 }
 
   validates :username, presence: true, uniqueness: { case_sensitive: false }, unless: :provider?
   validates :email, presence: true, uniqueness: { case_sensitive: false } # Email should always be unique
   validates :password, length: { minimum: 6 }, if: -> { password.present? || !provider? }
+  # # 验证 role 和 level 是否在定义的枚举值中 (可选但推荐)
+  validates :role, inclusion: { in: roles.keys }
+  validates :level, inclusion: { in: levels.keys }
+
+
 
   def self.from_omniauth(auth)
     # Case 1: User already exists with this provider and UID

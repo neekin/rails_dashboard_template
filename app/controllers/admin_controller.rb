@@ -2,6 +2,8 @@ class AdminController < ActionController::API
   private
   # 授权用户
   def authorize_user!
+    return if current_user.admin?
+
     unless @app_entity.user_id == current_user.id
       render json: { error: "无权限执行此操作" }, status: :forbidden
     end
@@ -28,7 +30,9 @@ class AdminController < ActionController::API
       id: user.id,
       username: user.username,
       email: user.email,
-      avatar_url: user.avatar_url
+      avatar_url: user.avatar_url,
+      role: user.role, # 会返回 "user" 或 "admin"
+      level: user.level  # 会返回 "free", "premium" 等
     }
   end
   # 校验当前用户是否拥有指定的 AppEntity 和 DynamicTable
@@ -47,7 +51,7 @@ class AdminController < ActionController::API
       render json: { error: "应用不存在" }, status: :not_found
       return
     end
-
+    return if current_user.admin?
     unless app_entity.user_id == current_user.id
       Rails.logger.error "Unauthorized access by user #{current_user.id} for AppEntity id: #{app_entity.id}"
       render json: { error: "您无权操作此表格所属的应用" }, status: :forbidden
